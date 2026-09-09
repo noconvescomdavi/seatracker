@@ -1,0 +1,8 @@
+[package]
+name = "seatracker-nv2-inspector"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+seatracker-provider-nv2 = { path = "../../chart-providers/nv2" }
+sha2 = "0.10"
