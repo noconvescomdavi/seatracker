@@ -12,5 +12,8 @@ members = [
   "core/voyage",
   "core/environment",
   "core/plugins",
-  "core/persistence"
+  "core/persistence",
+  "chart-providers/s57",
+  "chart-providers/kap",
+  "chart-providers/mbtiles"
 ]
