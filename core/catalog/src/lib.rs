@@ -297,8 +297,9 @@ mod tests {
         b.file_name = "b.kap".into();
         b.scale = Some(100_000);
 
+        let records = [a, b];
         let selected = select_quilt(
-            &[a, b],
+            &records,
             &Viewport {
                 min_lat: -5.0,
                 min_lon: -15.0,
