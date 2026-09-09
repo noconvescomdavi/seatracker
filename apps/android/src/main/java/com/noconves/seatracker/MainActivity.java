@@ -9,6 +9,9 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.content.SharedPreferences;
+import java.util.HashSet;
+import java.util.Set;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -45,6 +48,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private Polyline trackLine;
     private boolean tracking = false;
     private Location lastLocation;
+    private SharedPreferences prefs;
 
     private final ActivityResultLauncher<Intent> chartPicker =
         registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -54,8 +58,11 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             try {
                 getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
             } catch (SecurityException ignored) { }
+            Set<String> charts = new HashSet<>(prefs.getStringSet("chart_uris", new HashSet<>()));
+            charts.add(uri.toString());
+            prefs.edit().putStringSet("chart_uris", charts).apply();
             Toast.makeText(this,
-                "Carta selecionada. O ChartProvider validará o formato antes da indexação.",
+                "Carta adicionada ao catálogo local (" + charts.size() + "). O ChartProvider validará o formato antes da indexação.",
                 Toast.LENGTH_LONG).show();
         });
 
@@ -64,6 +71,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         MapLibre.getInstance(this);
         setContentView(R.layout.activity_main);
         status = findViewById(R.id.status);
+        prefs = getSharedPreferences("seatracker", MODE_PRIVATE);
         mapView = findViewById(R.id.mapView);
         mapView.onCreate(savedInstanceState);
         mapView.getMapAsync(m -> {
@@ -127,7 +135,12 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         if (mobMarker != null) map.removeMarker(mobMarker);
         mobMarker = map.addMarker(new MarkerOptions().position(p).title("MOB"));
         map.animateCamera(CameraUpdateFactory.newLatLngZoom(p, 14));
-        Toast.makeText(this, "MOB registrado imediatamente.", Toast.LENGTH_LONG).show();
+        prefs.edit()
+            .putFloat("mob_lat", (float) p.getLatitude())
+            .putFloat("mob_lon", (float) p.getLongitude())
+            .putLong("mob_time", System.currentTimeMillis())
+            .apply();
+        Toast.makeText(this, "MOB registrado e persistido.", Toast.LENGTH_LONG).show();
     }
 
     private void addWaypointAtShip() {
