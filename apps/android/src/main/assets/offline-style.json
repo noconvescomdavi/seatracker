@@ -1,0 +1,8 @@
+{
+  "version": 8,
+  "name": "SeaTracker Offline",
+  "sources": {},
+  "layers": [
+    {"id":"sea","type":"background","paint":{"background-color":"#DCECF2"}}
+  ]
+}
