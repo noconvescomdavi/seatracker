@@ -2,3 +2,7 @@
 name = "seatracker-voyage"
 version = "0.1.0"
 edition = "2024"
+
+[dependencies]
+seatracker-geographic = { path = "../geographic" }
+seatracker-routes = { path = "../routes" }
