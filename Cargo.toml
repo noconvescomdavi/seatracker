@@ -11,5 +11,6 @@ members = [
   "core/alarms",
   "core/voyage",
   "core/environment",
-  "core/plugins"
+  "core/plugins",
+  "core/persistence"
 ]
