@@ -1,4 +1,4 @@
-use seatracker_catalog::{admit_chart, ChartAdmission, ChartFormat};
+use seatracker_catalog::{ChartAdmission, ChartFormat, admit_chart};
 use seatracker_charts::ChartProvider;
 use seatracker_provider_kap::{KapMetadata, KapProvider};
 use seatracker_provider_mbtiles::MbTilesProvider;
@@ -7,10 +7,20 @@ use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChartInspection {
-    S57 { admission: ChartAdmission, probe: S57Probe },
-    Kap { admission: ChartAdmission, metadata: KapMetadata },
-    MbTiles { admission: ChartAdmission },
-    Unsupported { admission: ChartAdmission },
+    S57 {
+        admission: ChartAdmission,
+        probe: S57Probe,
+    },
+    Kap {
+        admission: ChartAdmission,
+        metadata: KapMetadata,
+    },
+    MbTiles {
+        admission: ChartAdmission,
+    },
+    Unsupported {
+        admission: ChartAdmission,
+    },
 }
 
 fn extension(path: &str) -> Option<&str> {
@@ -54,9 +64,9 @@ pub fn positively_identified_format(inspection: &ChartInspection) -> Option<Char
         {
             Some(ChartFormat::Kap)
         }
-        ChartInspection::MbTiles { admission: ChartAdmission::Accepted(ChartFormat::MbTiles) } => {
-            Some(ChartFormat::MbTiles)
-        }
+        ChartInspection::MbTiles {
+            admission: ChartAdmission::Accepted(ChartFormat::MbTiles),
+        } => Some(ChartFormat::MbTiles),
         _ => None,
     }
 }
@@ -70,7 +80,10 @@ mod tests {
         let bytes = b"BSB/NA=Demo\r\nKNP/SC=10000,GD=WGS84,PR=MERCATOR\r\n";
         let inspection = inspect_chart("demo.kap", bytes);
         assert!(matches!(inspection, ChartInspection::Kap { .. }));
-        assert_eq!(positively_identified_format(&inspection), Some(ChartFormat::Kap));
+        assert_eq!(
+            positively_identified_format(&inspection),
+            Some(ChartFormat::Kap)
+        );
     }
 
     #[test]
