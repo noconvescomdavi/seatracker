@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.location.GnssStatus;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -49,25 +50,36 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private static final int REQ_LOCATION = 40;
     private static final long GPS_STALE_MS = 10_000L;
     private static final String ACTIVE_MBTILES = "active.mbtiles";
+    private static final int MAX_TRACK_POINTS = 5_000;
 
     private MapView mapView;
     private MapLibreMap map;
     private LocationManager locationManager;
     private TextView status;
     private TextView chartStatus;
+    private TextView cursorStatus;
     private Marker ownShip;
     private Marker mobMarker;
+    private Marker measureMarker;
     private Polyline trackLine;
     private Polyline routeLine;
+    private Polyline eblLine;
+    private Polyline vrmLine;
+    private final List<Marker> routeMarkers = new ArrayList<>();
+    private final List<Marker> waypointMarkers = new ArrayList<>();
     private final List<LatLng> trackPoints = new ArrayList<>();
     private final List<LatLng> routePoints = new ArrayList<>();
+    private final List<LatLng> waypointPoints = new ArrayList<>();
     private boolean tracking = false;
     private boolean routeEditing = false;
+    private boolean measureMode = false;
     private boolean cameraCenteredOnGps = false;
     private Location lastLocation;
     private SharedPreferences prefs;
     private MbTilesTileServer tileServer;
     private int tileServerPort = -1;
+    private int satellitesInView = 0;
+    private String activeChartLabel = "Carta: nenhuma MBTiles carregada";
 
     private final Handler gpsHandler = new Handler(Looper.getMainLooper());
     private long lastFixElapsedMs = 0L;
@@ -76,6 +88,18 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         public void run() {
             updateGpsFreshnessUi();
             gpsHandler.postDelayed(this, 2_000L);
+        }
+    };
+
+    private final GnssStatus.Callback gnssCallback = new GnssStatus.Callback() {
+        @Override
+        public void onSatelliteStatusChanged(GnssStatus gnssStatus) {
+            satellitesInView = gnssStatus.getSatelliteCount();
+        }
+
+        @Override
+        public void onStopped() {
+            satellitesInView = 0;
         }
     };
 
@@ -96,10 +120,13 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         prefs = getSharedPreferences("seatracker", MODE_PRIVATE);
         status = findViewById(R.id.status);
         chartStatus = findViewById(R.id.chartStatus);
+        cursorStatus = findViewById(R.id.cursorStatus);
         mapView = findViewById(R.id.mapView);
         mapView.onCreate(savedInstanceState);
 
-        restoreRoute();
+        restorePoints("active_route", routePoints);
+        restorePoints("waypoints", waypointPoints);
+        restorePoints("active_track", trackPoints);
 
         mapView.getMapAsync(m -> {
             map = m;
@@ -113,28 +140,50 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                     if (routeEditing) {
                         addRoutePoint(point);
                     } else {
-                        map.addMarker(new MarkerOptions().position(point).title("Waypoint"));
+                        addWaypoint(point);
+                    }
+                    return true;
+                });
+
+                map.addOnMapClickListener(point -> {
+                    if (measureMode) {
+                        drawMeasurement(point);
+                    } else {
+                        showCursor(point);
                     }
                     return true;
                 });
 
                 redrawRoute();
+                redrawWaypoints();
+                redrawTrack();
+                restoreMob();
                 restoreActiveMbTiles();
             });
         });
 
+        configureButtons();
+
+        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        requestLocation();
+        gpsHandler.post(gpsFreshnessWatch);
+    }
+
+    private void configureButtons() {
         Button routeButton = findViewById(R.id.btnRoute);
         routeButton.setOnClickListener(v -> {
             routeEditing = !routeEditing;
+            measureMode = false;
             routeButton.setText(routeEditing ? "ROTA*" : "ROTA");
+            findViewById(R.id.btnMeasure).setSelected(false);
             Toast.makeText(
                 this,
                 routeEditing
-                    ? "Modo rota: toque e segure na carta para adicionar pernas."
-                    : "Rota salva.",
+                    ? "Modo rota: toque e segure para adicionar waypoints."
+                    : routeSummary(),
                 Toast.LENGTH_SHORT
             ).show();
-            persistRoute();
+            persistPoints("active_route", routePoints);
         });
         routeButton.setOnLongClickListener(v -> {
             clearRoute();
@@ -142,13 +191,37 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             return true;
         });
 
-        findViewById(R.id.btnMob).setOnClickListener(v -> activateMob());
-        findViewById(R.id.btnTrack).setOnClickListener(v -> toggleTrack((Button) v));
-        findViewById(R.id.btnImport).setOnClickListener(v -> chooseChart());
+        Button trackButton = findViewById(R.id.btnTrack);
+        trackButton.setOnClickListener(v -> toggleTrack(trackButton));
+        trackButton.setOnLongClickListener(v -> {
+            trackPoints.clear();
+            persistPoints("active_track", trackPoints);
+            redrawTrack();
+            Toast.makeText(this, "Track apagado.", Toast.LENGTH_SHORT).show();
+            return true;
+        });
 
-        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-        requestLocation();
-        gpsHandler.post(gpsFreshnessWatch);
+        Button measureButton = findViewById(R.id.btnMeasure);
+        measureButton.setOnClickListener(v -> {
+            measureMode = !measureMode;
+            routeEditing = false;
+            findViewById(R.id.btnRoute).setSelected(false);
+            measureButton.setText(measureMode ? "EBL*" : "EBL");
+            Toast.makeText(
+                this,
+                measureMode
+                    ? "EBL/VRM: toque na carta para medir a partir do own ship."
+                    : "EBL/VRM encerrado.",
+                Toast.LENGTH_SHORT
+            ).show();
+        });
+        measureButton.setOnLongClickListener(v -> {
+            clearMeasurement();
+            return true;
+        });
+
+        findViewById(R.id.btnMob).setOnClickListener(v -> activateMob());
+        findViewById(R.id.btnImport).setOnClickListener(v -> chooseChart());
     }
 
     private void requestLocation() {
@@ -172,6 +245,10 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         status.setText("SeaTracker • procurando sinal GPS…");
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0f, this);
+        try {
+            locationManager.registerGnssStatusCallback(gnssCallback, gpsHandler);
+        } catch (RuntimeException ignored) {
+        }
     }
 
     @Override
@@ -205,21 +282,23 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             }
 
             if (tracking) {
-                trackPoints.add(position);
-                redrawTrack();
+                addTrackPoint(position);
             }
         }
 
         double accuracy = location.hasAccuracy() ? location.getAccuracy() : Double.NaN;
         status.setText(String.format(
             Locale.US,
-            "GPS OK • LAT %.6f  LON %.6f  ACC %.0fm  SOG %.1f kn  COG %.0f°",
+            "GPS OK • %.6f %.6f • ACC %.0fm • SAT %d • SOG %.1f kn • COG %.0f°",
             location.getLatitude(),
             location.getLongitude(),
             accuracy,
+            satellitesInView,
             location.hasSpeed() ? location.getSpeed() * 1.943844f : 0f,
             location.hasBearing() ? location.getBearing() : 0f
         ));
+
+        updateMobStatus(position);
     }
 
     private void updateGpsFreshnessUi() {
@@ -239,7 +318,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         if (age > GPS_STALE_MS) {
             status.setText(String.format(
                 Locale.US,
-                "SeaTracker • posição GPS desatualizada (%ds)",
+                "SeaTracker • posição GPS STALE (%ds) • não usar para navegação",
                 age / 1000
             ));
         }
@@ -266,8 +345,14 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             && (SystemClock.elapsedRealtime() - lastFixElapsedMs) <= GPS_STALE_MS;
     }
 
+    private LatLng ownShipPosition() {
+        if (!hasFreshGpsFix()) return null;
+        return new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude());
+    }
+
     private void activateMob() {
-        if (!hasFreshGpsFix() || map == null) {
+        LatLng position = ownShipPosition();
+        if (position == null || map == null) {
             Toast.makeText(
                 this,
                 "MOB indisponível: posição GPS ainda não é válida.",
@@ -276,30 +361,64 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             return;
         }
 
-        LatLng position = new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude());
-        if (mobMarker != null) {
-            map.removeMarker(mobMarker);
-        }
+        if (mobMarker != null) map.removeMarker(mobMarker);
         mobMarker = map.addMarker(new MarkerOptions().position(position).title("MOB"));
         map.animateCamera(CameraUpdateFactory.newLatLngZoom(position, 14.0));
         prefs.edit()
-            .putFloat("mob_lat", (float) position.getLatitude())
-            .putFloat("mob_lon", (float) position.getLongitude())
+            .putString("mob_position", encodePoint(position))
             .putLong("mob_time", System.currentTimeMillis())
             .apply();
-        Toast.makeText(this, "MOB registrado e persistido.", Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "MOB registrado imediatamente.", Toast.LENGTH_LONG).show();
+    }
+
+    private void restoreMob() {
+        if (map == null) return;
+        String value = prefs.getString("mob_position", null);
+        LatLng point = decodePoint(value);
+        if (point != null) {
+            mobMarker = map.addMarker(new MarkerOptions().position(point).title("MOB"));
+        }
+    }
+
+    private void updateMobStatus(LatLng own) {
+        if (mobMarker == null) return;
+        LatLng mob = mobMarker.getPosition();
+        double bearing = NavigationMath.bearingDeg(own, mob);
+        double range = NavigationMath.distanceNm(own, mob);
+        cursorStatus.setText(String.format(
+            Locale.US,
+            "MOB • BRG %.0f° • RNG %.2f NM",
+            bearing,
+            range
+        ));
     }
 
     private void toggleTrack(Button button) {
         tracking = !tracking;
         button.setText(tracking ? "STOP" : "TRACK");
-        if (tracking) {
-            trackPoints.clear();
-            if (hasFreshGpsFix()) {
-                trackPoints.add(new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude()));
+        if (tracking && trackPoints.isEmpty()) {
+            LatLng own = ownShipPosition();
+            if (own != null) {
+                trackPoints.add(own);
+                persistPoints("active_track", trackPoints);
             }
-            redrawTrack();
         }
+        redrawTrack();
+    }
+
+    private void addTrackPoint(LatLng position) {
+        if (!trackPoints.isEmpty()) {
+            LatLng last = trackPoints.get(trackPoints.size() - 1);
+            if (NavigationMath.distanceNm(last, position) < 0.003) {
+                return;
+            }
+        }
+        if (trackPoints.size() == MAX_TRACK_POINTS) {
+            trackPoints.remove(0);
+        }
+        trackPoints.add(position);
+        persistPoints("active_track", trackPoints);
+        redrawTrack();
     }
 
     private void redrawTrack() {
@@ -313,15 +432,30 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         }
     }
 
+    private void addWaypoint(LatLng point) {
+        waypointPoints.add(point);
+        persistPoints("waypoints", waypointPoints);
+        redrawWaypoints();
+        showCursor(point);
+    }
+
+    private void redrawWaypoints() {
+        if (map == null) return;
+        removeMarkers(waypointMarkers);
+        for (int i = 0; i < waypointPoints.size(); i++) {
+            waypointMarkers.add(map.addMarker(
+                new MarkerOptions()
+                    .position(waypointPoints.get(i))
+                    .title("WP " + (i + 1))
+            ));
+        }
+    }
+
     private void addRoutePoint(LatLng point) {
         routePoints.add(point);
-        if (map != null) {
-            map.addMarker(new MarkerOptions()
-                .position(point)
-                .title("Rota WP " + routePoints.size()));
-        }
+        persistPoints("active_route", routePoints);
         redrawRoute();
-        persistRoute();
+        cursorStatus.setText(routeSummary());
     }
 
     private void redrawRoute() {
@@ -330,41 +464,151 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             map.removePolyline(routeLine);
             routeLine = null;
         }
+        removeMarkers(routeMarkers);
+        for (int i = 0; i < routePoints.size(); i++) {
+            routeMarkers.add(map.addMarker(
+                new MarkerOptions()
+                    .position(routePoints.get(i))
+                    .title("Rota WP " + (i + 1))
+            ));
+        }
         if (routePoints.size() >= 2) {
             routeLine = map.addPolyline(new PolylineOptions().addAll(routePoints).width(6f));
         }
     }
 
-    private void persistRoute() {
-        StringBuilder value = new StringBuilder();
-        for (LatLng point : routePoints) {
-            if (value.length() > 0) value.append(';');
-            value.append(point.getLatitude()).append(',').append(point.getLongitude());
+    private String routeSummary() {
+        double total = 0.0;
+        for (int i = 1; i < routePoints.size(); i++) {
+            total += NavigationMath.distanceNm(routePoints.get(i - 1), routePoints.get(i));
         }
-        prefs.edit().putString("active_route", value.toString()).apply();
-    }
-
-    private void restoreRoute() {
-        routePoints.clear();
-        String saved = prefs.getString("active_route", "");
-        if (saved == null || saved.isEmpty()) return;
-        for (String item : saved.split(";")) {
-            String[] parts = item.split(",");
-            if (parts.length != 2) continue;
-            try {
-                routePoints.add(new LatLng(
-                    Double.parseDouble(parts[0]),
-                    Double.parseDouble(parts[1])
-                ));
-            } catch (NumberFormatException ignored) {
-            }
-        }
+        return String.format(
+            Locale.US,
+            "Rota • %d WP • %.2f NM",
+            routePoints.size(),
+            total
+        );
     }
 
     private void clearRoute() {
         routePoints.clear();
-        persistRoute();
+        persistPoints("active_route", routePoints);
         redrawRoute();
+        cursorStatus.setText("Rota apagada");
+    }
+
+    private void showCursor(LatLng point) {
+        LatLng own = ownShipPosition();
+        if (own == null) {
+            cursorStatus.setText(String.format(
+                Locale.US,
+                "Cursor • LAT %.6f • LON %.6f",
+                point.getLatitude(),
+                point.getLongitude()
+            ));
+            return;
+        }
+        cursorStatus.setText(String.format(
+            Locale.US,
+            "Cursor %.6f %.6f • BRG %.0f° • RNG %.2f NM",
+            point.getLatitude(),
+            point.getLongitude(),
+            NavigationMath.bearingDeg(own, point),
+            NavigationMath.distanceNm(own, point)
+        ));
+    }
+
+    private void drawMeasurement(LatLng point) {
+        LatLng own = ownShipPosition();
+        if (own == null || map == null) {
+            Toast.makeText(this, "EBL/VRM requer GPS válido.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        clearMeasurement();
+        double range = NavigationMath.distanceNm(own, point);
+        double bearing = NavigationMath.bearingDeg(own, point);
+        eblLine = map.addPolyline(
+            new PolylineOptions().add(own, point).width(4f)
+        );
+        vrmLine = map.addPolyline(
+            new PolylineOptions().addAll(NavigationMath.circle(own, range, 72)).width(2f)
+        );
+        measureMarker = map.addMarker(
+            new MarkerOptions().position(point).title(String.format(
+                Locale.US,
+                "EBL %.0f° / VRM %.2f NM",
+                bearing,
+                range
+            ))
+        );
+        cursorStatus.setText(String.format(
+            Locale.US,
+            "EBL %.0f° • VRM %.2f NM",
+            bearing,
+            range
+        ));
+    }
+
+    private void clearMeasurement() {
+        if (map == null) return;
+        if (eblLine != null) {
+            map.removePolyline(eblLine);
+            eblLine = null;
+        }
+        if (vrmLine != null) {
+            map.removePolyline(vrmLine);
+            vrmLine = null;
+        }
+        if (measureMarker != null) {
+            map.removeMarker(measureMarker);
+            measureMarker = null;
+        }
+        cursorStatus.setText("EBL/VRM limpo");
+    }
+
+    private void removeMarkers(List<Marker> markers) {
+        if (map == null) return;
+        for (Marker marker : markers) {
+            map.removeMarker(marker);
+        }
+        markers.clear();
+    }
+
+    private void persistPoints(String key, List<LatLng> points) {
+        StringBuilder value = new StringBuilder();
+        for (LatLng point : points) {
+            if (value.length() > 0) value.append(';');
+            value.append(encodePoint(point));
+        }
+        prefs.edit().putString(key, value.toString()).apply();
+    }
+
+    private void restorePoints(String key, List<LatLng> output) {
+        output.clear();
+        String saved = prefs.getString(key, "");
+        if (saved == null || saved.isEmpty()) return;
+        for (String item : saved.split(";")) {
+            LatLng point = decodePoint(item);
+            if (point != null) output.add(point);
+        }
+    }
+
+    private String encodePoint(LatLng point) {
+        return point.getLatitude() + "," + point.getLongitude();
+    }
+
+    private LatLng decodePoint(String value) {
+        if (value == null || value.isEmpty()) return null;
+        String[] parts = value.split(",");
+        if (parts.length != 2) return null;
+        try {
+            double lat = Double.parseDouble(parts[0]);
+            double lon = Double.parseDouble(parts[1]);
+            if (lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0) return null;
+            return new LatLng(lat, lon);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private void chooseChart() {
@@ -384,23 +628,29 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             chartStatus.setText("Carta não carregada: selecione um arquivo .mbtiles");
             Toast.makeText(
                 this,
-                "Nesta versão operacional, a carta local renderizável deve estar em MBTiles.",
+                "O renderer Android validado nesta release usa MBTiles raster.",
                 Toast.LENGTH_LONG
             ).show();
             return;
         }
 
+        chartStatus.setText("Importando carta " + name + "…");
+        new Thread(() -> copyAndOpenChart(uri, name), "SeaTracker-ChartImport").start();
+    }
+
+    private void copyAndOpenChart(Uri uri, String name) {
         File chartsDir = new File(getFilesDir(), "charts");
         if (!chartsDir.exists() && !chartsDir.mkdirs()) {
-            chartStatus.setText("Falha ao criar armazenamento de cartas");
+            runOnUiThread(() -> chartStatus.setText("Falha ao criar armazenamento de cartas"));
             return;
         }
 
+        File temp = new File(chartsDir, ACTIVE_MBTILES + ".partial");
         File target = new File(chartsDir, ACTIVE_MBTILES);
         try (InputStream in = getContentResolver().openInputStream(uri);
-             FileOutputStream out = new FileOutputStream(target, false)) {
+             FileOutputStream out = new FileOutputStream(temp, false)) {
             if (in == null) throw new IllegalStateException("Não foi possível abrir a carta");
-            byte[] buffer = new byte[64 * 1024];
+            byte[] buffer = new byte[128 * 1024];
             int read;
             long total = 0L;
             while ((read = in.read(buffer)) != -1) {
@@ -411,11 +661,22 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                 out.write(buffer, 0, read);
             }
             out.flush();
+
+            if (target.exists() && !target.delete()) {
+                throw new IllegalStateException("Não foi possível substituir a carta anterior");
+            }
+            if (!temp.renameTo(target)) {
+                throw new IllegalStateException("Não foi possível finalizar a importação");
+            }
+
             prefs.edit().putString("active_chart_name", name).apply();
-            loadMbTiles(target, name);
+            runOnUiThread(() -> loadMbTiles(target, name));
         } catch (Exception e) {
-            chartStatus.setText("Falha ao importar carta");
-            Toast.makeText(this, "Erro na carta: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            temp.delete();
+            runOnUiThread(() -> {
+                chartStatus.setText("Falha ao importar carta");
+                Toast.makeText(this, "Erro na carta: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            });
         }
     }
 
@@ -444,20 +705,15 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     private void loadMbTiles(File file, String displayName) {
         try {
-            if (tileServer != null) {
-                tileServer.stop();
-            }
+            if (tileServer != null) tileServer.stop();
             tileServer = new MbTilesTileServer(file);
             tileServerPort = tileServer.start();
+            MbTilesTileServer.Info info = tileServer.getInfo();
 
             if (map == null) return;
             map.getStyle(style -> {
-                if (style.getLayer("chart-raster") != null) {
-                    style.removeLayer("chart-raster");
-                }
-                if (style.getSource("chart-source") != null) {
-                    style.removeSource("chart-source");
-                }
+                if (style.getLayer("chart-raster") != null) style.removeLayer("chart-raster");
+                if (style.getSource("chart-source") != null) style.removeSource("chart-source");
 
                 String template = "http://127.0.0.1:" + tileServerPort
                     + "/tiles/{z}/{x}/{y}.png";
@@ -466,7 +722,23 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                 RasterLayer layer = new RasterLayer("chart-raster", "chart-source");
                 style.addSource(source);
                 style.addLayer(layer);
-                chartStatus.setText("Carta MBTiles ativa: " + displayName);
+
+                String title = info != null && info.name != null ? info.name : displayName;
+                String zoom = info != null && info.minZoom != null && info.maxZoom != null
+                    ? " • Z" + info.minZoom + "-" + info.maxZoom
+                    : "";
+                activeChartLabel = "Carta MBTiles ativa: " + title + zoom;
+                chartStatus.setText(activeChartLabel);
+
+                if (!cameraCenteredOnGps && info != null && info.bounds != null) {
+                    double centerLon = (info.bounds[0] + info.bounds[2]) / 2.0;
+                    double centerLat = (info.bounds[1] + info.bounds[3]) / 2.0;
+                    double chartZoom = info.minZoom != null ? Math.max(1.0, info.minZoom) : 6.0;
+                    map.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                        new LatLng(centerLat, centerLon),
+                        chartZoom
+                    ));
+                }
             });
         } catch (Exception e) {
             chartStatus.setText("Carta inválida ou incompatível");
@@ -507,13 +779,16 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     @Override
     protected void onDestroy() {
         gpsHandler.removeCallbacks(gpsFreshnessWatch);
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+        if (locationManager != null
+            && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             == PackageManager.PERMISSION_GRANTED) {
             locationManager.removeUpdates(this);
+            try {
+                locationManager.unregisterGnssStatusCallback(gnssCallback);
+            } catch (RuntimeException ignored) {
+            }
         }
-        if (tileServer != null) {
-            tileServer.stop();
-        }
+        if (tileServer != null) tileServer.stop();
         mapView.onDestroy();
         super.onDestroy();
     }
