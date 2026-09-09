@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 seatracker-charts = { path = "../../core/charts" }
+rusqlite = { version = "0.38", features = ["bundled"] }
