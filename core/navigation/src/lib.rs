@@ -1,7 +1,8 @@
 pub mod measurement;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DataValidity {
+    #[default]
     Unknown,
     Invalid,
     Stale,
@@ -9,11 +10,6 @@ pub enum DataValidity {
     Valid,
 }
 
-impl Default for DataValidity {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NavigationState {
