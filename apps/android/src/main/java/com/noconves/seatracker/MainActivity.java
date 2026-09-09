@@ -9,6 +9,9 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.content.SharedPreferences;
 import java.util.HashSet;
 import java.util.Set;
@@ -49,6 +52,15 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private boolean tracking = false;
     private Location lastLocation;
     private SharedPreferences prefs;
+    private final Handler gpsHandler = new Handler(Looper.getMainLooper());
+    private long lastFixElapsedMs = 0L;
+    private static final long GPS_STALE_MS = 10_000L;
+    private final Runnable gpsFreshnessWatch = new Runnable() {
+        @Override public void run() {
+            updateGpsFreshnessUi();
+            gpsHandler.postDelayed(this, 2_000L);
+        }
+    };
 
     private final ActivityResultLauncher<Intent> chartPicker =
         registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -91,6 +103,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         findViewById(R.id.btnImport).setOnClickListener(v -> importChart());
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         requestLocation();
+        gpsHandler.post(gpsFreshnessWatch);
     }
 
     private void requestLocation() {
@@ -99,7 +112,12 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                 new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
             return;
         }
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 1f, this);
+        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            status.setText("SeaTracker • GPS desativado");
+            return;
+        }
+        status.setText("SeaTracker • procurando sinal GPS…");
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0f, this);
     }
 
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
@@ -110,6 +128,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     @Override public void onLocationChanged(Location location) {
         lastLocation = location;
+        lastFixElapsedMs = SystemClock.elapsedRealtime();
         LatLng p = new LatLng(location.getLatitude(), location.getLongitude());
         if (map != null) {
             if (ownShip == null) ownShip = map.addMarker(new MarkerOptions().position(p).title("Own Ship"));
@@ -120,14 +139,52 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                 trackLine = map.addPolyline(new PolylineOptions().addAll(trackPoints).width(4f));
             }
         }
-        status.setText(String.format(Locale.US, "LAT %.6f  LON %.6f  SOG %.1f kn  COG %.0f°",
-            location.getLatitude(), location.getLongitude(),
+        double accuracy = location.hasAccuracy() ? location.getAccuracy() : Double.NaN;
+        status.setText(String.format(Locale.US,
+            "GPS OK • LAT %.6f  LON %.6f  ACC %.0fm  SOG %.1f kn  COG %.0f°",
+            location.getLatitude(), location.getLongitude(), accuracy,
             location.hasSpeed() ? location.getSpeed() * 1.943844f : 0f,
             location.hasBearing() ? location.getBearing() : 0f));
     }
 
+    private void updateGpsFreshnessUi() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            status.setText("SeaTracker • GPS desativado");
+            return;
+        }
+        if (lastFixElapsedMs == 0L) {
+            status.setText("SeaTracker • procurando sinal GPS…");
+            return;
+        }
+        long age = SystemClock.elapsedRealtime() - lastFixElapsedMs;
+        if (age > GPS_STALE_MS) {
+            status.setText(String.format(Locale.US, "SeaTracker • posição GPS desatualizada (%ds)", age / 1000));
+        }
+    }
+
+    @Override public void onProviderDisabled(String provider) {
+        if (LocationManager.GPS_PROVIDER.equals(provider)) {
+            status.setText("SeaTracker • GPS desativado");
+        }
+    }
+
+    @Override public void onProviderEnabled(String provider) {
+        if (LocationManager.GPS_PROVIDER.equals(provider)) {
+            status.setText("SeaTracker • procurando sinal GPS…");
+        }
+    }
+
+    private boolean hasFreshGpsFix() {
+        return lastLocation != null
+            && lastFixElapsedMs > 0L
+            && (SystemClock.elapsedRealtime() - lastFixElapsedMs) <= GPS_STALE_MS;
+    }
+
     private void activateMob() {
-        if (lastLocation == null || map == null) {
+        if (!hasFreshGpsFix() || map == null) {
             Toast.makeText(this, "MOB indisponível: posição GPS ainda não válida.", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -144,7 +201,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     }
 
     private void addWaypointAtShip() {
-        if (lastLocation == null || map == null) {
+        if (!hasFreshGpsFix() || map == null) {
             Toast.makeText(this, "Sem posição válida para criar waypoint.", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -156,7 +213,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private void toggleTrack(Button button) {
         tracking = !tracking;
         button.setText(tracking ? "STOP" : "TRACK");
-        if (tracking && lastLocation != null) {
+        if (tracking && hasFreshGpsFix()) {
             trackPoints.clear();
             trackPoints.add(new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude()));
         }
@@ -176,6 +233,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     @Override protected void onStop() { mapView.onStop(); super.onStop(); }
     @Override public void onLowMemory() { super.onLowMemory(); mapView.onLowMemory(); }
     @Override protected void onDestroy() {
+        gpsHandler.removeCallbacks(gpsFreshnessWatch);
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             locationManager.removeUpdates(this);
         }
