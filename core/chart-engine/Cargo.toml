@@ -1,0 +1,11 @@
+[package]
+name = "seatracker-chart-engine"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+seatracker-charts = { path = "../charts" }
+seatracker-catalog = { path = "../catalog" }
+seatracker-provider-s57 = { path = "../../chart-providers/s57" }
+seatracker-provider-kap = { path = "../../chart-providers/kap" }
+seatracker-provider-mbtiles = { path = "../../chart-providers/mbtiles" }
