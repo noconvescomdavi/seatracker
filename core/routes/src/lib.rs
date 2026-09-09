@@ -1,6 +1,6 @@
 use quick_xml::{de::from_str, se::to_string};
-use serde::{Deserialize, Serialize};
 use seatracker_geographic::{great_circle_distance_m, initial_bearing_deg, meters_to_nm};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Waypoint {
@@ -263,7 +263,10 @@ impl Route {
     }
 
     pub fn total_distance_nm(&self) -> f64 {
-        self.legs().last().map(|leg| leg.cumulative_distance_nm).unwrap_or(0.0)
+        self.legs()
+            .last()
+            .map(|leg| leg.cumulative_distance_nm)
+            .unwrap_or(0.0)
     }
 }
 
@@ -290,8 +293,20 @@ mod tests {
         let route = Route {
             name: "Equator".into(),
             waypoints: vec![
-                Waypoint { name: "A".into(), latitude: 0.0, longitude: 0.0, notes: None, arrival_radius_nm: None },
-                Waypoint { name: "B".into(), latitude: 0.0, longitude: 1.0, notes: None, arrival_radius_nm: None },
+                Waypoint {
+                    name: "A".into(),
+                    latitude: 0.0,
+                    longitude: 0.0,
+                    notes: None,
+                    arrival_radius_nm: None,
+                },
+                Waypoint {
+                    name: "B".into(),
+                    latitude: 0.0,
+                    longitude: 1.0,
+                    notes: None,
+                    arrival_radius_nm: None,
+                },
             ],
         };
         let leg = route.legs()[0];

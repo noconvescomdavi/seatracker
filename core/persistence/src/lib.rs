@@ -1,5 +1,5 @@
-use rusqlite::{params, Connection};
-use serde::{de::DeserializeOwned, Serialize};
+use rusqlite::{Connection, params};
+use serde::{Serialize, de::DeserializeOwned};
 use std::path::Path;
 
 pub trait KeyValueStore {

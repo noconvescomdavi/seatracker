@@ -11,10 +11,7 @@ pub struct BoundingBox {
 
 impl BoundingBox {
     pub fn contains(&self, lat: f64, lon: f64) -> bool {
-        lat >= self.min_lat
-            && lat <= self.max_lat
-            && lon >= self.min_lon
-            && lon <= self.max_lon
+        lat >= self.min_lat && lat <= self.max_lat && lon >= self.min_lon && lon <= self.max_lon
     }
 
     pub fn intersects(&self, other: &BoundingBox) -> bool {

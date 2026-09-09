@@ -160,8 +160,12 @@ impl KapProvider {
 }
 
 impl ChartProvider for KapProvider {
-    fn provider_name(&self) -> &'static str { "KAPProvider" }
-    fn provider_version(&self) -> &'static str { "0.2.0" }
+    fn provider_name(&self) -> &'static str {
+        "KAPProvider"
+    }
+    fn provider_version(&self) -> &'static str {
+        "0.2.0"
+    }
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             raster: true,

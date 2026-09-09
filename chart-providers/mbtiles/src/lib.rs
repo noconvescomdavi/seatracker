@@ -69,7 +69,9 @@ impl TileCache {
             }
         }
         while self.used_bytes + data.len() > self.capacity_bytes {
-            let Some((_, old)) = self.items.pop_front() else { break };
+            let Some((_, old)) = self.items.pop_front() else {
+                break;
+            };
             self.used_bytes = self.used_bytes.saturating_sub(old.len());
         }
         self.used_bytes += data.len();
@@ -77,20 +79,27 @@ impl TileCache {
     }
 
     pub fn get(&mut self, key: (u32, u32, u32)) -> Option<Vec<u8>> {
-        let index = self.items.iter().position(|(item_key, _)| *item_key == key)?;
+        let index = self
+            .items
+            .iter()
+            .position(|(item_key, _)| *item_key == key)?;
         let item = self.items.remove(index)?;
         let data = item.1.clone();
         self.items.push_back(item);
         Some(data)
     }
 
-    pub fn used_bytes(&self) -> usize { self.used_bytes }
+    pub fn used_bytes(&self) -> usize {
+        self.used_bytes
+    }
 }
 
 impl MbTilesProvider {
     pub const SQLITE_MAGIC: &'static [u8] = b"SQLite format 3\0";
 
-    pub fn is_sqlite(header: &[u8]) -> bool { header.starts_with(Self::SQLITE_MAGIC) }
+    pub fn is_sqlite(header: &[u8]) -> bool {
+        header.starts_with(Self::SQLITE_MAGIC)
+    }
 
     pub fn open_read_only(path: impl AsRef<Path>) -> Result<Connection, String> {
         Connection::open_with_flags(
@@ -173,8 +182,12 @@ impl MbTilesProvider {
 }
 
 impl ChartProvider for MbTilesProvider {
-    fn provider_name(&self) -> &'static str { "MBTilesProvider" }
-    fn provider_version(&self) -> &'static str { "0.2.0" }
+    fn provider_name(&self) -> &'static str {
+        "MBTilesProvider"
+    }
+    fn provider_version(&self) -> &'static str {
+        "0.2.0"
+    }
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             raster: true,
@@ -226,7 +239,10 @@ mod tests {
             MbTilesProvider::read_tile(&conn, 1, 0, 1).unwrap(),
             Some(vec![1, 2, 3])
         );
-        assert_eq!(MbTilesProvider::to_model("demo.mbtiles", &meta).chart_id, "Demo");
+        assert_eq!(
+            MbTilesProvider::to_model("demo.mbtiles", &meta).chart_id,
+            "Demo"
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, params};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::cmp::Ordering;
@@ -160,11 +160,7 @@ pub fn select_quilt<'a>(records: &'a [ChartRecord], viewport: &Viewport) -> Vec<
         };
         scale_score(a)
             .cmp(&scale_score(b))
-            .then_with(|| {
-                b.quality
-                    .partial_cmp(&a.quality)
-                    .unwrap_or(Ordering::Equal)
-            })
+            .then_with(|| b.quality.partial_cmp(&a.quality).unwrap_or(Ordering::Equal))
             .then_with(|| a.file_name.cmp(&b.file_name))
     });
     candidates
@@ -251,7 +247,9 @@ impl ChartDatabase {
 
     pub fn count(&self) -> Result<u64, String> {
         self.conn
-            .query_row("SELECT COUNT(*) FROM charts", [], |row| row.get::<_, i64>(0))
+            .query_row("SELECT COUNT(*) FROM charts", [], |row| {
+                row.get::<_, i64>(0)
+            })
             .map(|value| value.max(0) as u64)
             .map_err(|e| e.to_string())
     }

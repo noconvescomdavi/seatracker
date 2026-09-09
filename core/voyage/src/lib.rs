@@ -30,11 +30,7 @@ impl VoyageLeg {
     }
 }
 
-pub fn plan_route(
-    route: &Route,
-    speed_knots: f64,
-    departure_ms: Option<u64>,
-) -> Vec<VoyageLeg> {
+pub fn plan_route(route: &Route, speed_knots: f64, departure_ms: Option<u64>) -> Vec<VoyageLeg> {
     let route_legs = route.legs();
     route
         .waypoints

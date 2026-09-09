@@ -45,8 +45,16 @@ mod tests {
     #[test]
     fn layers_sort_by_order() {
         let mut layers = vec![
-            LayerState { kind: LayerKind::Gps, visible: true, order: 10 },
-            LayerState { kind: LayerKind::Raster, visible: true, order: 0 },
+            LayerState {
+                kind: LayerKind::Gps,
+                visible: true,
+                order: 10,
+            },
+            LayerState {
+                kind: LayerKind::Raster,
+                visible: true,
+                order: 0,
+            },
         ];
         stable_layer_order(&mut layers);
         assert_eq!(layers[0].kind, LayerKind::Raster);

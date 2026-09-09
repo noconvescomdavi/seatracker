@@ -84,9 +84,27 @@ mod tests {
     #[test]
     fn detects_high_water() {
         let samples = vec![
-            TideSample { station_id: "A".into(), timestamp_ms: 0, height_m: 1.0, source: "x".into(), valid_until_ms: None },
-            TideSample { station_id: "A".into(), timestamp_ms: 1, height_m: 2.0, source: "x".into(), valid_until_ms: None },
-            TideSample { station_id: "A".into(), timestamp_ms: 2, height_m: 1.0, source: "x".into(), valid_until_ms: None },
+            TideSample {
+                station_id: "A".into(),
+                timestamp_ms: 0,
+                height_m: 1.0,
+                source: "x".into(),
+                valid_until_ms: None,
+            },
+            TideSample {
+                station_id: "A".into(),
+                timestamp_ms: 1,
+                height_m: 2.0,
+                source: "x".into(),
+                valid_until_ms: None,
+            },
+            TideSample {
+                station_id: "A".into(),
+                timestamp_ms: 2,
+                height_m: 1.0,
+                source: "x".into(),
+                valid_until_ms: None,
+            },
         ];
         assert_eq!(tide_extrema(&samples)[0].kind, ExtremumKind::HighWater);
     }

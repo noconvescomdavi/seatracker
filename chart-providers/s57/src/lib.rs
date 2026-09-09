@@ -59,7 +59,9 @@ impl S57Provider {
         }
         let parse_num = |range: std::ops::Range<usize>| -> Result<usize, String> {
             let value = std::str::from_utf8(&bytes[range]).map_err(|_| "non ASCII leader")?;
-            value.parse::<usize>().map_err(|_| "invalid numeric leader field".into())
+            value
+                .parse::<usize>()
+                .map_err(|_| "invalid numeric leader field".into())
         };
         let record_length = parse_num(0..5)?;
         let base_address = parse_num(12..17)?;
@@ -72,7 +74,8 @@ impl S57Provider {
             .ok_or("invalid field length digit count")? as usize;
         let field_position_digits = (bytes[21] as char)
             .to_digit(10)
-            .ok_or("invalid field position digit count")? as usize;
+            .ok_or("invalid field position digit count")?
+            as usize;
         let field_tag_digits = (bytes[23] as char)
             .to_digit(10)
             .ok_or("invalid field tag digit count")? as usize;
@@ -99,17 +102,18 @@ impl S57Provider {
                 .map_err(|_| "invalid field length")?
                 .parse::<usize>()
                 .map_err(|_| "invalid field length")?;
-            let position = std::str::from_utf8(
-                &bytes[pos_start..pos_start + field_position_digits],
-            )
-            .map_err(|_| "invalid field position")?
-            .parse::<usize>()
-            .map_err(|_| "invalid field position")?;
+            let position =
+                std::str::from_utf8(&bytes[pos_start..pos_start + field_position_digits])
+                    .map_err(|_| "invalid field position")?
+                    .parse::<usize>()
+                    .map_err(|_| "invalid field position")?;
 
             let field_start = base_address
                 .checked_add(position)
                 .ok_or("field start overflow")?;
-            let field_end = field_start.checked_add(length).ok_or("field end overflow")?;
+            let field_end = field_start
+                .checked_add(length)
+                .ok_or("field end overflow")?;
             if field_end > record_length {
                 return Err("ISO8211 field outside record".into());
             }
@@ -173,7 +177,10 @@ impl S57Provider {
         let inventory = Self::inventory(bytes, 100_000);
         let mut metadata = BTreeMap::new();
         metadata.insert("iso8211_records".into(), inventory.records.to_string());
-        metadata.insert("inventory_truncated".into(), inventory.truncated.to_string());
+        metadata.insert(
+            "inventory_truncated".into(),
+            inventory.truncated.to_string(),
+        );
         for (tag, count) in inventory.tags {
             metadata.insert(format!("field.{tag}"), count.to_string());
         }
@@ -189,8 +196,12 @@ impl S57Provider {
 }
 
 impl ChartProvider for S57Provider {
-    fn provider_name(&self) -> &'static str { "S57Provider" }
-    fn provider_version(&self) -> &'static str { "0.2.0" }
+    fn provider_name(&self) -> &'static str {
+        "S57Provider"
+    }
+    fn provider_version(&self) -> &'static str {
+        "0.2.0"
+    }
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             raster: false,

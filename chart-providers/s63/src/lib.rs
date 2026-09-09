@@ -21,7 +21,9 @@ impl S63Provider {
 }
 
 impl ChartProvider for S63Provider {
-    fn provider_name(&self) -> &'static str { "S63Provider" }
+    fn provider_name(&self) -> &'static str {
+        "S63Provider"
+    }
 
     fn can_open(&self, _header: &[u8], extension: Option<&str>) -> bool {
         matches!(extension, Some(ext) if ext.eq_ignore_ascii_case("000") || ext.eq_ignore_ascii_case("os63"))

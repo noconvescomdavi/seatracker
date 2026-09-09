@@ -10,7 +10,9 @@ pub enum DataValidity {
 }
 
 impl Default for DataValidity {
-    fn default() -> Self { Self::Unknown }
+    fn default() -> Self {
+        Self::Unknown
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -38,7 +40,8 @@ impl NavigationState {
 
     pub fn mark_stale_if_older_than(&mut self, now_ms: u64, max_age_ms: u64) {
         if let Some(timestamp) = self.timestamp_ms {
-            if now_ms.saturating_sub(timestamp) > max_age_ms && self.validity == DataValidity::Valid {
+            if now_ms.saturating_sub(timestamp) > max_age_ms && self.validity == DataValidity::Valid
+            {
                 self.validity = DataValidity::Stale;
             }
         }

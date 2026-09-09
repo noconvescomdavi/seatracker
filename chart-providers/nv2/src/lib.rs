@@ -20,7 +20,11 @@ pub struct Nv2Observation {
 }
 
 impl Nv2Provider {
-    pub fn printable_strings(bytes: &[u8], min_len: usize, max_results: usize) -> Vec<Nv2Observation> {
+    pub fn printable_strings(
+        bytes: &[u8],
+        min_len: usize,
+        max_results: usize,
+    ) -> Vec<Nv2Observation> {
         let mut out = Vec::new();
         let mut start = None;
         for (index, byte) in bytes.iter().copied().enumerate() {
@@ -35,7 +39,9 @@ impl Nv2Provider {
                             evidence: EvidenceLevel::Confirmed,
                             note: String::from_utf8_lossy(&bytes[s..index]).to_string(),
                         });
-                        if out.len() >= max_results { break; }
+                        if out.len() >= max_results {
+                            break;
+                        }
                     }
                     start = None;
                 }
@@ -47,7 +53,9 @@ impl Nv2Provider {
 }
 
 impl ChartProvider for Nv2Provider {
-    fn provider_name(&self) -> &'static str { "NV2Provider" }
+    fn provider_name(&self) -> &'static str {
+        "NV2Provider"
+    }
 
     fn can_open(&self, _header: &[u8], extension: Option<&str>) -> bool {
         matches!(extension, Some(ext) if ext.eq_ignore_ascii_case("nv2"))
