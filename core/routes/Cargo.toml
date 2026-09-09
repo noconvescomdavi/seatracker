@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 quick-xml = { version = "0.38", features = ["serialize"] }
+seatracker-geographic = { path = "../geographic" }
