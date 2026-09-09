@@ -1,8 +1,13 @@
 use std::{env, fs, thread, time::Duration};
 
 fn main() -> Result<(), String> {
-    let path = env::args().nth(1).ok_or("usage: seatracker-nmea-replay <log> [speed]")?;
-    let speed: f64 = env::args().nth(2).and_then(|value| value.parse().ok()).unwrap_or(1.0);
+    let path = env::args()
+        .nth(1)
+        .ok_or("usage: seatracker-nmea-replay <log> [speed]")?;
+    let speed: f64 = env::args()
+        .nth(2)
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(1.0);
     if !matches!(speed, 0.5 | 1.0 | 2.0 | 5.0 | 10.0) {
         return Err("speed must be 0.5, 1, 2, 5 or 10".into());
     }
