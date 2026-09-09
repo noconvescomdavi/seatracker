@@ -83,6 +83,7 @@ mod tests {
             sog_knots: 10.0,
             cog_deg: 0.0,
             validity: DataValidity::Valid,
+            ..NavigationState::default()
         };
         let target = AisTarget {
             mmsi: 123,
