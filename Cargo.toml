@@ -5,6 +5,7 @@ members = [
   "core/navigation",
   "core/charts",
   "core/chart-engine",
+  "core/gps",
   "core/routes",
   "core/nmea",
   "core/ais",
@@ -14,8 +15,13 @@ members = [
   "core/environment",
   "core/plugins",
   "core/persistence",
+  "simulator",
+  "renderer/core",
   "apps/desktop",
   "chart-providers/s57",
+  "chart-providers/s63",
   "chart-providers/kap",
-  "chart-providers/mbtiles"
+  "chart-providers/mbtiles",
+  "chart-providers/cm93",
+  "chart-providers/nv2"
 ]
