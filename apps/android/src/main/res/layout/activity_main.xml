@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top"
         android:orientation="vertical"
-        android:background="#DD061D2D"
+        android:background="#E0061D2D"
         android:padding="8dp">
 
         <TextView
@@ -32,6 +32,14 @@
             android:textSize="12sp" />
 
         <TextView
+            android:id="@+id/cursorStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Cursor: toque na carta"
+            android:textColor="#CFE8F3"
+            android:textSize="12sp" />
+
+        <TextView
             android:id="@+id/safety"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -46,8 +54,8 @@
         android:layout_gravity="bottom"
         android:gravity="center"
         android:orientation="horizontal"
-        android:background="#DD061D2D"
-        android:padding="8dp">
+        android:background="#E0061D2D"
+        android:padding="6dp">
 
         <Button
             android:id="@+id/btnMob"
@@ -69,6 +77,13 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="TRACK" />
+
+        <Button
+            android:id="@+id/btnMeasure"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="EBL" />
 
         <Button
             android:id="@+id/btnImport"
