@@ -15,7 +15,79 @@ pub struct AisTarget {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AisMessage {
     PositionReport(AisTarget),
+    StaticVoyageData(AisStaticVoyageData),
     Unsupported { message_type: u8, mmsi: Option<u32> },
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct AisStaticVoyageData {
+    pub mmsi: u32,
+    pub imo: Option<u32>,
+    pub callsign: Option<String>,
+    pub name: Option<String>,
+    pub ship_type: Option<u8>,
+    pub dimension_to_bow_m: Option<u16>,
+    pub dimension_to_stern_m: Option<u16>,
+    pub dimension_to_port_m: Option<u8>,
+    pub dimension_to_starboard_m: Option<u8>,
+    pub eta_month: Option<u8>,
+    pub eta_day: Option<u8>,
+    pub eta_hour: Option<u8>,
+    pub eta_minute: Option<u8>,
+    pub draught_m: Option<f32>,
+    pub destination: Option<String>,
+    pub received_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct AisTargetRecord {
+    pub dynamic: Option<AisTarget>,
+    pub static_data: Option<AisStaticVoyageData>,
+}
+
+#[derive(Debug, Default)]
+pub struct AisTargetDatabase {
+    targets: HashMap<u32, AisTargetRecord>,
+}
+
+impl AisTargetDatabase {
+    pub fn apply(&mut self, message: AisMessage) {
+        match message {
+            AisMessage::PositionReport(target) => {
+                self.targets.entry(target.mmsi).or_default().dynamic = Some(target);
+            }
+            AisMessage::StaticVoyageData(data) => {
+                self.targets.entry(data.mmsi).or_default().static_data = Some(data);
+            }
+            AisMessage::Unsupported { .. } => {}
+        }
+    }
+
+    pub fn get(&self, mmsi: u32) -> Option<&AisTargetRecord> {
+        self.targets.get(&mmsi)
+    }
+
+    pub fn remove_stale(&mut self, now_ms: u64, stale_after_ms: u64) {
+        self.targets.retain(|_, record| {
+            let dynamic_fresh = record
+                .dynamic
+                .as_ref()
+                .is_some_and(|target| !target.is_stale(now_ms, stale_after_ms));
+            let static_fresh = record
+                .static_data
+                .as_ref()
+                .is_some_and(|data| now_ms.saturating_sub(data.received_at_ms) <= stale_after_ms);
+            dynamic_fresh || static_fresh
+        });
+    }
+
+    pub fn len(&self) -> usize {
+        self.targets.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.targets.is_empty()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -161,6 +233,17 @@ fn ubits(bits: &[bool], start: usize, len: usize) -> Option<u64> {
     Some(out)
 }
 
+fn sixbit_text(bits: &[bool], start: usize, chars: usize) -> Option<String> {
+    let mut out = String::with_capacity(chars);
+    for index in 0..chars {
+        let value = ubits(bits, start + index * 6, 6)? as u8;
+        let ch = if value < 32 { value + 64 } else { value } as char;
+        out.push(ch);
+    }
+    let value = out.trim_end_matches('@').trim().to_string();
+    (!value.is_empty()).then_some(value)
+}
+
 fn sbits(bits: &[bool], start: usize, len: usize) -> Option<i64> {
     let u = ubits(bits, start, len)?;
     let sign = 1_u64 << (len - 1);
@@ -197,6 +280,30 @@ fn decode_payload(payload: &str, fill_bits: u8, received_at_ms: u64) -> Result<A
                 cog_deg: (cog_raw < 3600).then_some(cog_raw as f32 / 10.0),
                 heading_deg: (hdg_raw < 511).then_some(hdg_raw as u16),
                 navigation_status: nav,
+                received_at_ms,
+            }))
+        }
+        5 => {
+            let mmsi = mmsi.ok_or("missing MMSI")?;
+            let imo_raw = ubits(&bits, 40, 30).unwrap_or(0) as u32;
+            let ship_type = ubits(&bits, 232, 8).map(|v| v as u8);
+            let draught_raw = ubits(&bits, 294, 8).unwrap_or(0) as u8;
+            Ok(AisMessage::StaticVoyageData(AisStaticVoyageData {
+                mmsi,
+                imo: (imo_raw != 0).then_some(imo_raw),
+                callsign: sixbit_text(&bits, 70, 7),
+                name: sixbit_text(&bits, 112, 20),
+                ship_type,
+                dimension_to_bow_m: ubits(&bits, 240, 9).map(|v| v as u16),
+                dimension_to_stern_m: ubits(&bits, 249, 9).map(|v| v as u16),
+                dimension_to_port_m: ubits(&bits, 258, 6).map(|v| v as u8),
+                dimension_to_starboard_m: ubits(&bits, 264, 6).map(|v| v as u8),
+                eta_month: ubits(&bits, 274, 4).map(|v| v as u8).filter(|v| *v > 0),
+                eta_day: ubits(&bits, 278, 5).map(|v| v as u8).filter(|v| *v > 0),
+                eta_hour: ubits(&bits, 283, 5).map(|v| v as u8).filter(|v| *v < 24),
+                eta_minute: ubits(&bits, 288, 6).map(|v| v as u8).filter(|v| *v < 60),
+                draught_m: (draught_raw > 0).then_some(draught_raw as f32 / 10.0),
+                destination: sixbit_text(&bits, 302, 20),
                 received_at_ms,
             }))
         }
@@ -295,6 +402,23 @@ mod tests {
             1,
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn target_database_merges_dynamic() {
+        let mut db = AisTargetDatabase::default();
+        db.apply(AisMessage::PositionReport(AisTarget {
+            mmsi: 123456789,
+            latitude: Some(1.0),
+            longitude: Some(2.0),
+            sog_knots: Some(3.0),
+            cog_deg: Some(4.0),
+            heading_deg: None,
+            navigation_status: None,
+            received_at_ms: 10,
+        }));
+        assert_eq!(db.len(), 1);
+        assert!(db.get(123456789).unwrap().dynamic.is_some());
     }
 
     #[test]
