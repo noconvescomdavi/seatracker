@@ -58,10 +58,10 @@ impl TrackRecorder {
         if self.state != TrackState::Recording {
             return false;
         }
-        if let Some(last) = self.points.last() {
-            if point.timestamp_ms <= last.timestamp_ms {
-                return false;
-            }
+        if let Some(last) = self.points.last()
+            && point.timestamp_ms <= last.timestamp_ms
+        {
+            return false;
         }
         if self.points.len() == self.max_points {
             self.points.remove(0);
