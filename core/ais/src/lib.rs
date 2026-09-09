@@ -54,10 +54,12 @@ impl AisTargetDatabase {
     pub fn apply(&mut self, message: AisMessage) {
         match message {
             AisMessage::PositionReport(target) => {
-                self.targets.entry(target.mmsi).or_default().dynamic = Some(target);
+                let mmsi = target.mmsi;
+                self.targets.entry(mmsi).or_default().dynamic = Some(target);
             }
             AisMessage::StaticVoyageData(data) => {
-                self.targets.entry(data.mmsi).or_default().static_data = Some(data);
+                let mmsi = data.mmsi;
+                self.targets.entry(mmsi).or_default().static_data = Some(data);
             }
             AisMessage::Unsupported { .. } => {}
         }
