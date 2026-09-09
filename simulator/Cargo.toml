@@ -1,0 +1,9 @@
+[package]
+name = "seatracker-simulator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+seatracker-geographic = { path = "../core/geographic" }
+seatracker-gps = { path = "../core/gps" }
+seatracker-navigation = { path = "../core/navigation" }
