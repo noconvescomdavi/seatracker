@@ -1,0 +1,10 @@
+[package]
+name = "seatracker-desktop"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+seatracker-navigation = { path = "../../core/navigation" }
+seatracker-charts = { path = "../../core/charts" }
+seatracker-catalog = { path = "../../core/catalog" }
+seatracker-routes = { path = "../../core/routes" }
