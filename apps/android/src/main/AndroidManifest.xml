@@ -5,7 +5,8 @@
         android:allowBackup="true"
         android:label="SeaTracker"
         android:theme="@style/Theme.SeaTracker"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"
             android:screenOrientation="unspecified"
