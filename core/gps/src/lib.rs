@@ -1,4 +1,4 @@
-use seatracker_navigation::DataValidity;
+use seatracker_navigation::{DataValidity, NavigationState};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PositionFix {
@@ -30,6 +30,23 @@ impl PositionFix {
             self.validity = DataValidity::Invalid;
         }
         self
+    }
+}
+
+impl From<PositionFix> for NavigationState {
+    fn from(fix: PositionFix) -> Self {
+        NavigationState {
+            latitude: fix.latitude,
+            longitude: fix.longitude,
+            sog_knots: fix.sog_knots.unwrap_or(0.0),
+            cog_deg: fix.cog_deg.unwrap_or(0.0),
+            heading_deg: fix.heading_deg,
+            fix_quality: None,
+            satellites: fix.satellites,
+            hdop: fix.hdop,
+            timestamp_ms: Some(fix.timestamp_ms),
+            validity: fix.validity,
+        }
     }
 }
 
