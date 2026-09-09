@@ -7,6 +7,7 @@ fn main() {
         sog_knots: 0.0,
         cog_deg: 0.0,
         validity: DataValidity::Unavailable,
+        ..NavigationState::default()
     };
 
     println!("SeaTracker Desktop bootstrap");
