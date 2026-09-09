@@ -41,7 +41,7 @@ mod tests {
             distance_nm: 20.0,
             speed_knots: 10.0,
         };
-        assert_eq!(total_distance_nm(&[l.clone()]), 20.0);
+        assert_eq!(total_distance_nm(std::slice::from_ref(&l)), 20.0);
         assert_eq!(total_ttg_hours(&[l]), Some(2.0));
     }
 }
