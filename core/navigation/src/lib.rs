@@ -10,7 +10,6 @@ pub enum DataValidity {
     Valid,
 }
 
-
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NavigationState {
     pub latitude: f64,
