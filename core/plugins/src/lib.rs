@@ -2,7 +2,14 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Permission {
-    Serial, Network, Filesystem, Gps, Bluetooth, Usb, ChartData, NavigationState
+    Serial,
+    Network,
+    Filesystem,
+    Gps,
+    Bluetooth,
+    Usb,
+    ChartData,
+    NavigationState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,7 +35,11 @@ pub fn permissions_granted(requested: &[Permission], granted: &[Permission]) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test] fn permissions_are_explicit() {
-        assert!(!permissions_granted(&[Permission::Gps,Permission::Network], &[Permission::Gps]));
+    #[test]
+    fn permissions_are_explicit() {
+        assert!(!permissions_granted(
+            &[Permission::Gps, Permission::Network],
+            &[Permission::Gps]
+        ));
     }
 }

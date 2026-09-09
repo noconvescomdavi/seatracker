@@ -28,11 +28,13 @@ impl MbTilesProvider {
         Connection::open_with_flags(
             path,
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        ).map_err(|e| e.to_string())
+        )
+        .map_err(|e| e.to_string())
     }
 
     pub fn read_metadata(conn: &Connection) -> Result<MbTilesMetadata, String> {
-        let mut stmt = conn.prepare("SELECT name, value FROM metadata ORDER BY name")
+        let mut stmt = conn
+            .prepare("SELECT name, value FROM metadata ORDER BY name")
             .map_err(|e| e.to_string())?;
         let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
         let mut values = BTreeMap::new();
@@ -44,7 +46,12 @@ impl MbTilesProvider {
         Ok(MbTilesMetadata { values })
     }
 
-    pub fn read_tile(conn: &Connection, z: u32, x: u32, y_tms: u32) -> Result<Option<Vec<u8>>, String> {
+    pub fn read_tile(
+        conn: &Connection,
+        z: u32,
+        x: u32,
+        y_tms: u32,
+    ) -> Result<Option<Vec<u8>>, String> {
         let mut stmt = conn.prepare(
             "SELECT tile_data FROM tiles WHERE zoom_level=?1 AND tile_column=?2 AND tile_row=?3 LIMIT 1"
         ).map_err(|e| e.to_string())?;
@@ -65,10 +72,14 @@ impl MbTilesProvider {
 }
 
 impl ChartProvider for MbTilesProvider {
-    fn provider_name(&self) -> &'static str { "MBTilesProvider" }
+    fn provider_name(&self) -> &'static str {
+        "MBTilesProvider"
+    }
 
     fn can_open(&self, header: &[u8], extension: Option<&str>) -> bool {
-        extension.map(|e| e.eq_ignore_ascii_case("mbtiles")).unwrap_or(false)
+        extension
+            .map(|e| e.eq_ignore_ascii_case("mbtiles"))
+            .unwrap_or(false)
             || Self::is_sqlite(header)
     }
 }
@@ -100,6 +111,9 @@ mod tests {
 
         let meta = MbTilesProvider::read_metadata(&conn).unwrap();
         assert_eq!(meta.get("name"), Some("Demo"));
-        assert_eq!(MbTilesProvider::read_tile(&conn,1,0,1).unwrap(), Some(vec![1,2,3]));
+        assert_eq!(
+            MbTilesProvider::read_tile(&conn, 1, 0, 1).unwrap(),
+            Some(vec![1, 2, 3])
+        );
     }
 }

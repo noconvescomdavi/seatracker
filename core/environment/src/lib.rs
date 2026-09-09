@@ -19,10 +19,20 @@ pub struct CurrentSample {
 
 pub trait TideProvider {
     fn provider_name(&self) -> &'static str;
-    fn samples(&self, station_id: &str, from_ms: u64, to_ms: u64) -> Result<Vec<TideSample>, String>;
+    fn samples(
+        &self,
+        station_id: &str,
+        from_ms: u64,
+        to_ms: u64,
+    ) -> Result<Vec<TideSample>, String>;
 }
 
 pub trait CurrentProvider {
     fn provider_name(&self) -> &'static str;
-    fn samples(&self, station_id: &str, from_ms: u64, to_ms: u64) -> Result<Vec<CurrentSample>, String>;
+    fn samples(
+        &self,
+        station_id: &str,
+        from_ms: u64,
+        to_ms: u64,
+    ) -> Result<Vec<CurrentSample>, String>;
 }

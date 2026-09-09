@@ -1,4 +1,4 @@
-use seatracker_ais::{cpa_tcpa_nm, AisTarget};
+use seatracker_ais::{AisTarget, cpa_tcpa_nm};
 use seatracker_navigation::NavigationState;
 
 #[derive(Debug, Clone, PartialEq)]

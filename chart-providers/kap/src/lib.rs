@@ -58,39 +58,59 @@ impl KapProvider {
                         parts[3].trim().parse::<f64>(),
                         parts[4].trim().parse::<f64>(),
                     );
-                    if let (Ok(pixel_x),Ok(pixel_y),Ok(latitude),Ok(longitude)) = parsed {
-                        out.references.push(KapReference { pixel_x, pixel_y, latitude, longitude });
+                    if let (Ok(pixel_x), Ok(pixel_y), Ok(latitude), Ok(longitude)) = parsed {
+                        out.references.push(KapReference {
+                            pixel_x,
+                            pixel_y,
+                            latitude,
+                            longitude,
+                        });
                     }
                 }
             }
-            if line.as_bytes().contains(&0x1A) { break; }
+            if line.as_bytes().contains(&0x1A) {
+                break;
+            }
         }
         out
     }
 
-    pub fn affine_pixel_to_geo(meta: &KapMetadata, x: f64, y: f64) -> Option<(f64,f64)> {
-        if meta.references.len() < 3 { return None; }
+    pub fn affine_pixel_to_geo(meta: &KapMetadata, x: f64, y: f64) -> Option<(f64, f64)> {
+        if meta.references.len() < 3 {
+            return None;
+        }
         let a = meta.references[0];
         let b = meta.references[1];
         let c = meta.references[2];
 
-        let det = (b.pixel_x-a.pixel_x)*(c.pixel_y-a.pixel_y) - (c.pixel_x-a.pixel_x)*(b.pixel_y-a.pixel_y);
-        if det.abs() < 1e-12 { return None; }
+        let det = (b.pixel_x - a.pixel_x) * (c.pixel_y - a.pixel_y)
+            - (c.pixel_x - a.pixel_x) * (b.pixel_y - a.pixel_y);
+        if det.abs() < 1e-12 {
+            return None;
+        }
 
-        let u = ((x-a.pixel_x)*(c.pixel_y-a.pixel_y) - (c.pixel_x-a.pixel_x)*(y-a.pixel_y)) / det;
-        let v = ((b.pixel_x-a.pixel_x)*(y-a.pixel_y) - (x-a.pixel_x)*(b.pixel_y-a.pixel_y)) / det;
+        let u = ((x - a.pixel_x) * (c.pixel_y - a.pixel_y)
+            - (c.pixel_x - a.pixel_x) * (y - a.pixel_y))
+            / det;
+        let v = ((b.pixel_x - a.pixel_x) * (y - a.pixel_y)
+            - (x - a.pixel_x) * (b.pixel_y - a.pixel_y))
+            / det;
 
-        let lat = a.latitude + u*(b.latitude-a.latitude) + v*(c.latitude-a.latitude);
-        let lon = a.longitude + u*(b.longitude-a.longitude) + v*(c.longitude-a.longitude);
-        Some((lat,lon))
+        let lat = a.latitude + u * (b.latitude - a.latitude) + v * (c.latitude - a.latitude);
+        let lon = a.longitude + u * (b.longitude - a.longitude) + v * (c.longitude - a.longitude);
+        Some((lat, lon))
     }
 }
 
 impl ChartProvider for KapProvider {
-    fn provider_name(&self) -> &'static str { "KAPProvider" }
+    fn provider_name(&self) -> &'static str {
+        "KAPProvider"
+    }
 
     fn can_open(&self, header: &[u8], extension: Option<&str>) -> bool {
-        extension.map(|e| e.eq_ignore_ascii_case("kap")).unwrap_or(false)
+        extension
+            .map(|e| e.eq_ignore_ascii_case("kap"))
+            .unwrap_or(false)
             || header.windows(4).take(4096).any(|w| w == b"BSB/")
     }
 }
@@ -102,13 +122,13 @@ mod tests {
     #[test]
     fn parses_common_header_fields_and_refs() {
         let h=b"BSB/NA=Test Chart\r\nKNP/SC=50000,GD=WGS84,PR=MERCATOR\r\nREF/1,0,0,-22.0,-43.0\r\nREF/2,100,0,-22.0,-42.0\r\nREF/3,0,100,-23.0,-43.0\r\n";
-        let m=KapProvider::parse_header(h, 4096);
-        assert_eq!(m.name.as_deref(),Some("Test Chart"));
-        assert_eq!(m.scale,Some(50000));
-        assert_eq!(m.datum.as_deref(),Some("WGS84"));
-        assert_eq!(m.references.len(),3);
-        let p=KapProvider::affine_pixel_to_geo(&m,50.0,50.0).unwrap();
-        assert!((p.0+22.5).abs()<1e-9);
-        assert!((p.1+42.5).abs()<1e-9);
+        let m = KapProvider::parse_header(h, 4096);
+        assert_eq!(m.name.as_deref(), Some("Test Chart"));
+        assert_eq!(m.scale, Some(50000));
+        assert_eq!(m.datum.as_deref(), Some("WGS84"));
+        assert_eq!(m.references.len(), 3);
+        let p = KapProvider::affine_pixel_to_geo(&m, 50.0, 50.0).unwrap();
+        assert!((p.0 + 22.5).abs() < 1e-9);
+        assert!((p.1 + 42.5).abs() < 1e-9);
     }
 }

@@ -10,10 +10,30 @@ pub enum Geometry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ChartObjectKind {
-    Sounding, DepthContour, DepthArea, Coastline, LandArea, Light, Buoy,
-    Beacon, Wreck, Obstruction, RestrictedArea, Anchorage, Fairway,
-    TrafficSeparationScheme, Cable, Pipeline, Bridge, Port, Berth,
-    NavigationAid, TextLabel, Elevation, TriangulationPoint, Metadata
+    Sounding,
+    DepthContour,
+    DepthArea,
+    Coastline,
+    LandArea,
+    Light,
+    Buoy,
+    Beacon,
+    Wreck,
+    Obstruction,
+    RestrictedArea,
+    Anchorage,
+    Fairway,
+    TrafficSeparationScheme,
+    Cable,
+    Pipeline,
+    Bridge,
+    Port,
+    Berth,
+    NavigationAid,
+    TextLabel,
+    Elevation,
+    TriangulationPoint,
+    Metadata,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -84,30 +84,51 @@ fn to_waypoint(p: GpxPoint, fallback: String) -> Waypoint {
 pub fn import_gpx(xml: &str) -> Result<GpxData, String> {
     let gpx: Gpx = from_str(xml).map_err(|e| e.to_string())?;
 
-    let waypoints = gpx.waypoints.into_iter().enumerate()
-        .map(|(i,p)| to_waypoint(p, format!("WP{}", i + 1)))
+    let waypoints = gpx
+        .waypoints
+        .into_iter()
+        .enumerate()
+        .map(|(i, p)| to_waypoint(p, format!("WP{}", i + 1)))
         .collect();
 
-    let routes = gpx.routes.into_iter().map(|r| Route {
-        name: r.name.unwrap_or_else(|| "Route".into()),
-        waypoints: r.points.into_iter().enumerate()
-            .map(|(i,p)| to_waypoint(p, format!("WP{}", i + 1)))
-            .collect(),
-    }).collect();
+    let routes = gpx
+        .routes
+        .into_iter()
+        .map(|r| Route {
+            name: r.name.unwrap_or_else(|| "Route".into()),
+            waypoints: r
+                .points
+                .into_iter()
+                .enumerate()
+                .map(|(i, p)| to_waypoint(p, format!("WP{}", i + 1)))
+                .collect(),
+        })
+        .collect();
 
-    let tracks = gpx.tracks.into_iter().map(|t| {
-        let mut n = 0usize;
-        let mut points = Vec::new();
-        for seg in t.segments {
-            for p in seg.points {
-                n += 1;
-                points.push(to_waypoint(p, format!("TP{}", n)));
+    let tracks = gpx
+        .tracks
+        .into_iter()
+        .map(|t| {
+            let mut n = 0usize;
+            let mut points = Vec::new();
+            for seg in t.segments {
+                for p in seg.points {
+                    n += 1;
+                    points.push(to_waypoint(p, format!("TP{}", n)));
+                }
             }
-        }
-        Track { name: t.name.unwrap_or_else(|| "Track".into()), points }
-    }).collect();
+            Track {
+                name: t.name.unwrap_or_else(|| "Track".into()),
+                points,
+            }
+        })
+        .collect();
 
-    Ok(GpxData { waypoints, routes, tracks })
+    Ok(GpxData {
+        waypoints,
+        routes,
+        tracks,
+    })
 }
 
 pub fn import_gpx_routes(xml: &str) -> Result<Vec<Route>, String> {
@@ -144,12 +165,21 @@ pub fn export_gpx_routes(routes: &[Route]) -> Result<String, String> {
     let out = OutGpx {
         version: "1.1",
         creator: "SeaTracker",
-        routes: routes.iter().map(|r| OutRoute {
-            name: &r.name,
-            points: r.waypoints.iter().map(|p| OutPoint {
-                lat: p.latitude, lon: p.longitude, name: &p.name
-            }).collect(),
-        }).collect(),
+        routes: routes
+            .iter()
+            .map(|r| OutRoute {
+                name: &r.name,
+                points: r
+                    .waypoints
+                    .iter()
+                    .map(|p| OutPoint {
+                        lat: p.latitude,
+                        lon: p.longitude,
+                        name: &p.name,
+                    })
+                    .collect(),
+            })
+            .collect(),
     };
     let body = to_string(&out).map_err(|e| e.to_string())?;
     Ok(format!(r#"<?xml version="1.0" encoding="UTF-8"?>{}"#, body))

@@ -60,7 +60,9 @@ pub fn admit_chart(path: &str, head: &[u8]) -> ChartAdmission {
     let format = detect_format(path, head);
     match format {
         ChartFormat::MbTiles if !head.starts_with(b"SQLite format 3\0") => {
-            ChartAdmission::Rejected("MBTiles extension present but SQLite signature is missing".into())
+            ChartAdmission::Rejected(
+                "MBTiles extension present but SQLite signature is missing".into(),
+            )
         }
         ChartFormat::Kap => {
             let looks_like_bsb = head.windows(4).take(4096).any(|w| w == b"BSB/");
@@ -75,7 +77,9 @@ pub fn admit_chart(path: &str, head: &[u8]) -> ChartAdmission {
         ChartFormat::Cm93 => ChartAdmission::NeedsValidation(ChartFormat::Cm93),
         ChartFormat::S63 => ChartAdmission::NeedsValidation(ChartFormat::S63),
         ChartFormat::MbTiles => ChartAdmission::Accepted(ChartFormat::MbTiles),
-        ChartFormat::Unknown => ChartAdmission::Rejected("unsupported or unknown chart format".into()),
+        ChartFormat::Unknown => {
+            ChartAdmission::Rejected("unsupported or unknown chart format".into())
+        }
     }
 }
 

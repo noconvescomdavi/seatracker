@@ -33,7 +33,11 @@ pub struct AisAssembler {
 }
 
 impl AisAssembler {
-    pub fn push(&mut self, sentence: &str, received_at_ms: u64) -> Result<Option<AisMessage>, String> {
+    pub fn push(
+        &mut self,
+        sentence: &str,
+        received_at_ms: u64,
+    ) -> Result<Option<AisMessage>, String> {
         let body = sentence.trim().trim_start_matches('!');
         let body = body.split('*').next().unwrap_or(body);
         let f: Vec<&str> = body.split(',').collect();
@@ -64,13 +68,16 @@ impl AisAssembler {
         let fill_bits: u8 = f[6].parse().map_err(|_| "invalid fill bits")?;
         let key = format!("{seq}:{channel}");
 
-        let group = self.groups.entry(key.clone()).or_insert_with(|| FragmentGroup {
-            total,
-            channel: channel.clone(),
-            payloads: vec![None; total as usize],
-            fill_bits: 0,
-            updated_at_ms: received_at_ms,
-        });
+        let group = self
+            .groups
+            .entry(key.clone())
+            .or_insert_with(|| FragmentGroup {
+                total,
+                channel: channel.clone(),
+                payloads: vec![None; total as usize],
+                fill_bits: 0,
+                updated_at_ms: received_at_ms,
+            });
 
         if group.total != total || group.channel != channel {
             self.groups.remove(&key);
@@ -179,10 +186,8 @@ fn decode_payload(payload: &str, fill_bits: u8, received_at_ms: u64) -> Result<A
             let cog_raw = ubits(&bits, 116, 12).unwrap_or(3600);
             let hdg_raw = ubits(&bits, 128, 9).unwrap_or(511);
 
-            let longitude =
-                (lon_raw.abs() <= 108_600_000).then_some(lon_raw as f64 / 600_000.0);
-            let latitude =
-                (lat_raw.abs() <= 54_600_000).then_some(lat_raw as f64 / 600_000.0);
+            let longitude = (lon_raw.abs() <= 108_600_000).then_some(lon_raw as f64 / 600_000.0);
+            let latitude = (lat_raw.abs() <= 54_600_000).then_some(lat_raw as f64 / 600_000.0);
 
             Ok(AisMessage::PositionReport(AisTarget {
                 mmsi,
@@ -284,14 +289,20 @@ mod tests {
     #[test]
     fn assembler_rejects_fragment_without_sequence_id() {
         let mut assembler = AisAssembler::default();
-        let result = assembler.push("!AIVDM,2,1,,A,55NBsi02;R@4L@E>221@E=B1HE=<Dh0000000016?4pN?88888888888880,0*00", 1);
+        let result = assembler.push(
+            "!AIVDM,2,1,,A,55NBsi02;R@4L@E>221@E=B1HE=<Dh0000000016?4pN?88888888888880,0*00",
+            1,
+        );
         assert!(result.is_err());
     }
 
     #[test]
     fn assembler_discards_stale_groups() {
         let mut assembler = AisAssembler::default();
-        let _ = assembler.push("!AIVDM,2,1,7,A,55NBsi02;R@4L@E>221@E=B1HE=<Dh0000000016?4pN?88888888888880,0*00", 1000);
+        let _ = assembler.push(
+            "!AIVDM,2,1,7,A,55NBsi02;R@4L@E>221@E=B1HE=<Dh0000000016?4pN?88888888888880,0*00",
+            1000,
+        );
         assert_eq!(assembler.pending_groups(), 1);
         assembler.discard_stale(5000, 3000);
         assert_eq!(assembler.pending_groups(), 0);
