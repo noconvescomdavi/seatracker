@@ -1,3 +1,5 @@
+pub mod measurement;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DataValidity { Unknown, Invalid, Stale, Unavailable, Valid }
 
@@ -9,6 +11,7 @@ pub struct NavigationState {
     pub cog_deg: f32,
     pub validity: DataValidity,
 }
+
 impl NavigationState {
     pub fn is_usable(&self) -> bool { self.validity == DataValidity::Valid }
 }
