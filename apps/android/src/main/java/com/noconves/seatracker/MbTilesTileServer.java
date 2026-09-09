@@ -11,16 +11,43 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MbTilesTileServer {
+    public static final class Info {
+        public final String name;
+        public final String format;
+        public final Integer minZoom;
+        public final Integer maxZoom;
+        public final double[] bounds;
+
+        Info(String name, String format, Integer minZoom, Integer maxZoom, double[] bounds) {
+            this.name = name;
+            this.format = format;
+            this.minZoom = minZoom;
+            this.maxZoom = maxZoom;
+            this.bounds = bounds;
+        }
+
+        public boolean isRaster() {
+            return format == null
+                || format.equalsIgnoreCase("png")
+                || format.equalsIgnoreCase("jpg")
+                || format.equalsIgnoreCase("jpeg")
+                || format.equalsIgnoreCase("webp");
+        }
+    }
+
     private final File dbFile;
     private final ExecutorService pool = Executors.newFixedThreadPool(2);
     private ServerSocket serverSocket;
     private Thread acceptThread;
     private SQLiteDatabase db;
+    private Info info;
 
     public MbTilesTileServer(File dbFile) {
         this.dbFile = dbFile;
@@ -30,11 +57,95 @@ public final class MbTilesTileServer {
         if (serverSocket != null) {
             return serverSocket.getLocalPort();
         }
-        db = SQLiteDatabase.openDatabase(dbFile.getAbsolutePath(), null, SQLiteDatabase.OPEN_READONLY);
+        db = SQLiteDatabase.openDatabase(
+            dbFile.getAbsolutePath(),
+            null,
+            SQLiteDatabase.OPEN_READONLY
+        );
+        validateSchema();
+        info = readInfo();
+        if (!info.isRaster()) {
+            closeDatabase();
+            throw new IOException("MBTiles vectorial ainda não é renderizável pelo raster layer Android");
+        }
+
         serverSocket = new ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"));
         acceptThread = new Thread(this::acceptLoop, "SeaTracker-MBTiles");
         acceptThread.start();
         return serverSocket.getLocalPort();
+    }
+
+    public synchronized Info getInfo() {
+        return info;
+    }
+
+    private void validateSchema() throws IOException {
+        if (!tableExists("tiles")) {
+            closeDatabase();
+            throw new IOException("Tabela tiles ausente");
+        }
+        if (!tableExists("metadata")) {
+            closeDatabase();
+            throw new IOException("Tabela metadata ausente");
+        }
+    }
+
+    private boolean tableExists(String name) {
+        if (db == null) return false;
+        try (Cursor cursor = db.rawQuery(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+            new String[]{name}
+        )) {
+            return cursor.moveToFirst();
+        }
+    }
+
+    private Info readInfo() {
+        Map<String, String> values = new HashMap<>();
+        if (db != null) {
+            try (Cursor cursor = db.rawQuery("SELECT name,value FROM metadata", null)) {
+                while (cursor.moveToNext()) {
+                    values.put(cursor.getString(0), cursor.getString(1));
+                }
+            }
+        }
+
+        Integer minZoom = parseInt(values.get("minzoom"));
+        Integer maxZoom = parseInt(values.get("maxzoom"));
+        double[] bounds = parseBounds(values.get("bounds"));
+
+        return new Info(
+            values.get("name"),
+            values.get("format"),
+            minZoom,
+            maxZoom,
+            bounds
+        );
+    }
+
+    private static Integer parseInt(String value) {
+        if (value == null) return null;
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static double[] parseBounds(String value) {
+        if (value == null) return null;
+        String[] parts = value.split(",");
+        if (parts.length != 4) return null;
+        try {
+            return new double[]{
+                Double.parseDouble(parts[0].trim()),
+                Double.parseDouble(parts[1].trim()),
+                Double.parseDouble(parts[2].trim()),
+                Double.parseDouble(parts[3].trim())
+            };
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private void acceptLoop() {
@@ -53,9 +164,8 @@ public final class MbTilesTileServer {
              BufferedInputStream in = new BufferedInputStream(s.getInputStream());
              BufferedOutputStream out = new BufferedOutputStream(s.getOutputStream())) {
             String requestLine = readLine(in);
-            if (requestLine == null) {
-                return;
-            }
+            if (requestLine == null) return;
+
             String[] parts = requestLine.split(" ");
             if (parts.length < 2) {
                 writeStatus(out, 400, "Bad Request");
@@ -69,8 +179,7 @@ public final class MbTilesTileServer {
             }
 
             if (path.equals("/health")) {
-                byte[] ok = "OK".getBytes(StandardCharsets.UTF_8);
-                writeBytes(out, 200, "text/plain", ok);
+                writeBytes(out, 200, "text/plain", "OK".getBytes(StandardCharsets.UTF_8));
                 return;
             }
 
@@ -118,7 +227,8 @@ public final class MbTilesTileServer {
         if (db == null) return null;
         try (Cursor cursor = db.rawQuery(
             "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=? LIMIT 1",
-            new String[]{String.valueOf(z), String.valueOf(x), String.valueOf(yTms)})) {
+            new String[]{String.valueOf(z), String.valueOf(x), String.valueOf(yTms)}
+        )) {
             if (!cursor.moveToFirst()) return null;
             return cursor.getBlob(0);
         }
@@ -126,15 +236,23 @@ public final class MbTilesTileServer {
 
     private static String detectMime(byte[] data) {
         if (data.length >= 8
-            && data[0] == (byte) 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
+            && data[0] == (byte) 0x89
+            && data[1] == 0x50
+            && data[2] == 0x4e
+            && data[3] == 0x47) {
             return "image/png";
         }
         if (data.length >= 3
-            && data[0] == (byte) 0xFF && data[1] == (byte) 0xD8 && data[2] == (byte) 0xFF) {
+            && data[0] == (byte) 0xff
+            && data[1] == (byte) 0xd8
+            && data[2] == (byte) 0xff) {
             return "image/jpeg";
         }
         if (data.length >= 12
-            && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F') {
+            && data[0] == 'R'
+            && data[1] == 'I'
+            && data[2] == 'F'
+            && data[3] == 'F') {
             return "image/webp";
         }
         return "application/octet-stream";
@@ -158,17 +276,39 @@ public final class MbTilesTileServer {
         return sb.length() == 0 ? null : sb.toString();
     }
 
-    private static void writeStatus(BufferedOutputStream out, int code, String message) throws IOException {
+    private static void writeStatus(
+        BufferedOutputStream out,
+        int code,
+        String message
+    ) throws IOException {
         writeBytes(out, code, "text/plain", message.getBytes(StandardCharsets.UTF_8));
     }
 
-    private static void writeBytes(BufferedOutputStream out, int code, String contentType, byte[] body) throws IOException {
-        String header = String.format(Locale.US,
-            "HTTP/1.1 %d OK\r\nContent-Type: %s\r\nContent-Length: %d\r\nConnection: close\r\nCache-Control: max-age=3600\r\n\r\n",
-            code, contentType, body.length);
+    private static void writeBytes(
+        BufferedOutputStream out,
+        int code,
+        String contentType,
+        byte[] body
+    ) throws IOException {
+        String reason = code == 200 ? "OK" : "Error";
+        String header = String.format(
+            Locale.US,
+            "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %d\r\nConnection: close\r\nCache-Control: max-age=3600\r\n\r\n",
+            code,
+            reason,
+            contentType,
+            body.length
+        );
         out.write(header.getBytes(StandardCharsets.US_ASCII));
         out.write(body);
         out.flush();
+    }
+
+    private void closeDatabase() {
+        if (db != null) {
+            db.close();
+            db = null;
+        }
     }
 
     public synchronized void stop() {
@@ -177,10 +317,7 @@ public final class MbTilesTileServer {
         } catch (IOException ignored) {
         }
         serverSocket = null;
-        if (db != null) {
-            db.close();
-            db = null;
-        }
+        closeDatabase();
         pool.shutdownNow();
     }
 }
