@@ -4,6 +4,7 @@ members = [
   "core/geographic",
   "core/navigation",
   "core/charts",
+  "core/chart-engine",
   "core/routes",
   "core/nmea",
   "core/ais",
