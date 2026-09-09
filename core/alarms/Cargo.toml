@@ -2,3 +2,7 @@
 name = "seatracker-alarms"
 version = "0.1.0"
 edition = "2024"
+
+[dependencies]
+seatracker-ais = { path = "../ais" }
+seatracker-navigation = { path = "../navigation" }
