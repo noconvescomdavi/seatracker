@@ -7,6 +7,7 @@ members = [
   "core/chart-engine",
   "core/gps",
   "core/routes",
+  "core/tracks",
   "core/nmea",
   "core/ais",
   "core/catalog",
