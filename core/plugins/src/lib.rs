@@ -29,6 +29,6 @@ pub fn permissions_granted(requested: &[Permission], granted: &[Permission]) -> 
 mod tests {
     use super::*;
     #[test] fn permissions_are_explicit() {
-        assert!(!permissions_granted(&[Permission::Gps,Permission::Network],[Permission::Gps]));
+        assert!(!permissions_granted(&[Permission::Gps,Permission::Network], &[Permission::Gps]));
     }
 }
