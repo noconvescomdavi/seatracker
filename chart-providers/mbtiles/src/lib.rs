@@ -63,10 +63,10 @@ impl TileCache {
         if data.len() > self.capacity_bytes {
             return;
         }
-        if let Some(index) = self.items.iter().position(|(item_key, _)| *item_key == key) {
-            if let Some((_, old)) = self.items.remove(index) {
-                self.used_bytes = self.used_bytes.saturating_sub(old.len());
-            }
+        if let Some(index) = self.items.iter().position(|(item_key, _)| *item_key == key)
+            && let Some((_, old)) = self.items.remove(index)
+        {
+            self.used_bytes = self.used_bytes.saturating_sub(old.len());
         }
         while self.used_bytes + data.len() > self.capacity_bytes {
             let Some((_, old)) = self.items.pop_front() else {
