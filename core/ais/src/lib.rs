@@ -177,7 +177,7 @@ fn decode_payload(payload: &str, fill_bits: u8, received_at_ms: u64) -> Result<A
     let mmsi = ubits(&bits, 8, 30).map(|v| v as u32);
 
     match message_type {
-        1 | 2 | 3 => {
+        1..=3 => {
             let mmsi = mmsi.ok_or("missing MMSI")?;
             let nav = ubits(&bits, 38, 4).map(|v| v as u8);
             let sog_raw = ubits(&bits, 50, 10).unwrap_or(1023);
@@ -223,6 +223,7 @@ pub fn parse_vdm_vdo(sentence: &str, received_at_ms: u64) -> Result<AisMessage, 
     decode_payload(f[5], fill, received_at_ms)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn cpa_tcpa_nm(
     own_lat: f64,
     own_lon: f64,
