@@ -167,6 +167,80 @@ pub enum NmeaMessage {
     Unsupported(String),
 }
 
+pub fn encode_sentence(body: &str) -> String {
+    let checksum = body.as_bytes().iter().fold(0u8, |acc, byte| acc ^ byte);
+    format!("${body}*{checksum:02X}")
+}
+
+pub fn encode_xte_nm(error_nm: f64, steer_right: bool) -> String {
+    let direction = if steer_right { "R" } else { "L" };
+    encode_sentence(&format!("GPXTE,A,A,{:.3},{direction},N", error_nm.abs()))
+}
+
+pub fn encode_rmb(
+    xte_nm: f64,
+    steer_right: bool,
+    origin_id: &str,
+    destination_id: &str,
+    destination_lat: f64,
+    destination_lon: f64,
+    range_nm: f64,
+    bearing_deg: f64,
+    closing_velocity_knots: f64,
+    arrival: bool,
+) -> String {
+    let direction = if steer_right { "R" } else { "L" };
+    let (lat_value, lat_hemi) = encode_coord(destination_lat, true);
+    let (lon_value, lon_hemi) = encode_coord(destination_lon, false);
+    let arrival_flag = if arrival { "A" } else { "V" };
+    encode_sentence(&format!(
+        "GPRMB,A,{:.3},{direction},{origin_id},{destination_id},{lat_value},{lat_hemi},{lon_value},{lon_hemi},{:.3},{:.1},{:.2},{arrival_flag}",
+        xte_nm.abs(),
+        range_nm.max(0.0),
+        bearing_deg.rem_euclid(360.0),
+        closing_velocity_knots.max(0.0),
+    ))
+}
+
+pub fn encode_apb(
+    xte_nm: f64,
+    steer_right: bool,
+    bearing_origin_to_destination_deg: f64,
+    bearing_present_to_destination_deg: f64,
+    heading_to_steer_deg: f64,
+    destination_id: &str,
+    arrival_circle_entered: bool,
+) -> String {
+    let direction = if steer_right { "R" } else { "L" };
+    let arrival = if arrival_circle_entered { "A" } else { "V" };
+    encode_sentence(&format!(
+        "GPAPB,A,A,{:.3},{direction},N,{arrival},V,{:.1},T,{destination_id},{:.1},T,{:.1},T",
+        xte_nm.abs(),
+        bearing_origin_to_destination_deg.rem_euclid(360.0),
+        bearing_present_to_destination_deg.rem_euclid(360.0),
+        heading_to_steer_deg.rem_euclid(360.0),
+    ))
+}
+
+fn encode_coord(value: f64, latitude: bool) -> (String, &'static str) {
+    let hemisphere = if latitude {
+        if value < 0.0 { "S" } else { "N" }
+    } else if value < 0.0 {
+        "W"
+    } else {
+        "E"
+    };
+    let absolute = value.abs();
+    let degrees = absolute.floor();
+    let minutes = (absolute - degrees) * 60.0;
+    let formatted = if latitude {
+        format!("{degrees:02.0}{minutes:07.4}")
+    } else {
+        format!("{degrees:03.0}{minutes:07.4}")
+    };
+    (formatted, hemisphere)
+}
+
 pub fn validate_checksum(sentence: &str) -> bool {
     let s = sentence.trim();
     let Some(star) = s.rfind('*') else {
@@ -394,6 +468,29 @@ mod tests {
     #[test]
     fn rejects_bad_checksum() {
         assert!(parse("$GPRMC,1,A,1,N,1,E,1,1,1*00").is_err());
+    }
+
+    #[test]
+    fn encodes_autopilot_sentences_with_valid_checksums() {
+        let xte = encode_xte_nm(0.12, true);
+        assert!(validate_checksum(&xte));
+
+        let rmb = encode_rmb(
+            0.12,
+            true,
+            "A",
+            "B",
+            -22.9,
+            -43.2,
+            3.4,
+            87.0,
+            8.0,
+            false,
+        );
+        assert!(validate_checksum(&rmb));
+
+        let apb = encode_apb(0.12, true, 90.0, 88.0, 87.0, "B", false);
+        assert!(validate_checksum(&apb));
     }
 
     #[test]
