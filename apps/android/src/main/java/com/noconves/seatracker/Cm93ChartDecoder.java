@@ -161,9 +161,9 @@ public final class Cm93ChartDecoder {
     }
 
     public static Result decode(File file, Map<Integer,String> dictionary) throws Exception {
-        if(file.getName().toLowerCase(Locale.ROOT).endsWith(".xz")) throw new Exception("CM93 .xz requer descompressão antes da leitura");
-        long len=file.length(); if(len<138||len>256L*1024L*1024L)throw new Exception("Tamanho de célula CM93 inválido");
-        byte[] bytes=Files.readAllBytes(file.toPath());
+        long len=file.length(); if(len<16||len>256L*1024L*1024L)throw new Exception("Tamanho de célula CM93 inválido");
+        byte[] bytes=Cm93FileBytes.read(file);
+        if(bytes.length<138)throw new Exception("CM93 descompactado é muito curto");
         Reader r=new Reader(bytes);
         int prolog=r.u16(); int t1=r.i32(); int t2=r.i32();
         if(prolog<138||t1<0||t2<0||((long)prolog+t1+t2)!=bytes.length)throw new Exception("Prólogo CM93 inválido");

@@ -35,6 +35,8 @@ import org.maplibre.android.annotations.Marker;
 import org.maplibre.android.annotations.MarkerOptions;
 import org.maplibre.android.annotations.Polyline;
 import org.maplibre.android.annotations.PolylineOptions;
+import org.maplibre.android.annotations.Polygon;
+import org.maplibre.android.annotations.PolygonOptions;
 import org.maplibre.android.camera.CameraPosition;
 import org.maplibre.android.camera.CameraUpdateFactory;
 import org.maplibre.android.geometry.LatLng;
@@ -108,6 +110,11 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private final Map<Integer, Boolean> aisRiskState = new HashMap<>();
     private List<KapChartCatalog.Entry> kapCatalog = new ArrayList<>();
     private KapChartCatalog.Entry activeKapEntry;
+    private List<Cm93ChartCatalog.Entry> cm93Catalog = new ArrayList<>();
+    private Cm93ChartCatalog.Entry activeCm93Entry;
+    private final List<Polyline> cm93Lines = new ArrayList<>();
+    private final List<Polygon> cm93Areas = new ArrayList<>();
+    private final List<Marker> cm93Markers = new ArrayList<>();
     private long lastAutoChartCheckMs = 0L;
     private int tileServerPort = -1;
     private int satellitesInView = 0;
@@ -615,6 +622,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         updateMobStatus(position);
         updateRouteGuidance(position, location.hasSpeed() ? location.getSpeed() * 1.943844 : 0.0);
         autoSelectKapForPosition(position);
+        autoSelectCm93ForPosition(position);
     }
 
     private void updateGpsFreshnessUi() {
@@ -1099,13 +1107,15 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             kind = "kap";
         } else if (lower.endsWith(".mbtiles")) {
             kind = "mbtiles";
+        } else if (Cm93ChartDecoder.isCm93CellName(name)) {
+            kind = "cm93";
         } else if (lower.endsWith(".nv2")) {
             chartStatus.setText("NV2 detectado • provider em validação");
             Toast.makeText(this, "NV2 ainda não possui renderização validada.", Toast.LENGTH_LONG).show();
             return;
         } else {
             chartStatus.setText("Formato ainda não suportado: " + name);
-            Toast.makeText(this, "Selecione KAP/BSB ou MBTiles.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Selecione KAP/BSB, CM93 ou MBTiles.", Toast.LENGTH_LONG).show();
             return;
         }
 
@@ -1121,7 +1131,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         }
 
         String safeName = sanitizeChartFileName(name);
-        String activeName = kind.equals("kap") ? safeName : ACTIVE_MBTILES;
+        String activeName = (kind.equals("kap") || kind.equals("cm93")) ? safeName : ACTIVE_MBTILES;
         File temp = new File(chartsDir, activeName + ".partial");
         File target = new File(chartsDir, activeName);
         try (InputStream in = getContentResolver().openInputStream(uri);
@@ -1156,6 +1166,9 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                 if (kind.equals("kap")) {
                     refreshKapCatalog();
                     loadKap(target, name);
+                } else if (kind.equals("cm93")) {
+                    refreshCm93Catalog();
+                    loadCm93(target, name);
                 } else {
                     loadMbTiles(target, name);
                 }
@@ -1187,6 +1200,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     private void restoreActiveChart() {
         refreshKapCatalog();
+        refreshCm93Catalog();
         File chartsDir = new File(getFilesDir(), CHARTS_DIR);
         String kind = prefs.getString("active_chart_kind", "");
         String name = prefs.getString("active_chart_name", "Carta");
@@ -1198,6 +1212,12 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             return;
         }
 
+        if ("cm93".equals(kind)) {
+            File file = findCm93FileByName(chartsDir, fileName);
+            if (file != null && file.isFile()) loadCm93(file, name);
+            return;
+        }
+
         if ("mbtiles".equals(kind)) {
             File file = new File(chartsDir, fileName.isEmpty() ? ACTIVE_MBTILES : fileName);
             if (file.isFile()) loadMbTiles(file, name);
@@ -1206,6 +1226,26 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     private void refreshKapCatalog() {
         kapCatalog = KapChartCatalog.scan(new File(getFilesDir(), CHARTS_DIR));
+    }
+
+    private void refreshCm93Catalog() {
+        cm93Catalog = Cm93ChartCatalog.scan(new File(getFilesDir(), CHARTS_DIR));
+    }
+
+    private File findCm93FileByName(File root, String name) {
+        if (root == null || !root.exists() || name == null || name.isEmpty()) return null;
+        File[] files = root.listFiles();
+        if (files == null) return null;
+        for (File file : files) {
+            if (file.isFile() && file.getName().equals(name)) return file;
+        }
+        for (File file : files) {
+            if (file.isDirectory()) {
+                File found = findCm93FileByName(file, name);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     private void autoSelectKapForPosition(LatLng position) {
@@ -1223,6 +1263,85 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             .putString("active_chart_file", best.file.getName())
             .apply();
         loadKap(best.file, best.name);
+    }
+
+    private void autoSelectCm93ForPosition(LatLng position) {
+        if (position == null || map == null || cm93Catalog.isEmpty()) return;
+        if ("kap".equals(prefs.getString("active_chart_kind", ""))) return;
+        Cm93ChartCatalog.Entry best = Cm93ChartCatalog.bestFor(cm93Catalog, position, activeCm93Entry);
+        if (best == null || best == activeCm93Entry) return;
+        activeCm93Entry = best;
+        prefs.edit()
+            .putString("active_chart_name", best.name)
+            .putString("active_chart_kind", "cm93")
+            .putString("active_chart_file", best.file.getName())
+            .apply();
+        loadCm93(best.file, best.name);
+    }
+
+    private void clearCm93Annotations() {
+        if (map == null) return;
+        for (Polyline line : cm93Lines) map.removePolyline(line);
+        for (Polygon area : cm93Areas) map.removePolygon(area);
+        for (Marker markerItem : cm93Markers) map.removeMarker(markerItem);
+        cm93Lines.clear();
+        cm93Areas.clear();
+        cm93Markers.clear();
+    }
+
+    private void loadCm93(File file, String displayName) {
+        chartStatus.setText("Decodificando CM93 " + displayName + "…");
+        activeCm93Entry = Cm93ChartCatalog.fromFile(file);
+        new Thread(() -> {
+            try {
+                Map<Integer, String> dictionary = Cm93ChartDecoder.loadObjectDictionary(new File(getFilesDir(), CHARTS_DIR));
+                Cm93ChartDecoder.Result result = Cm93ChartDecoder.decode(file, dictionary);
+                runOnUiThread(() -> {
+                    if (map == null) return;
+                    clearCm93Annotations();
+                    int rendered = 0;
+                    for (Cm93ChartDecoder.Feature feature : result.features) {
+                        if (rendered >= 12000) break;
+                        if (feature.type == Cm93ChartDecoder.GeometryType.LINE && feature.points.size() >= 2) {
+                            cm93Lines.add(map.addPolyline(new PolylineOptions().addAll(feature.points).width(2f)));
+                            rendered++;
+                        } else if (feature.type == Cm93ChartDecoder.GeometryType.AREA && feature.points.size() >= 3) {
+                            cm93Areas.add(map.addPolygon(new PolygonOptions().addAll(feature.points)));
+                            rendered++;
+                        } else if (feature.type == Cm93ChartDecoder.GeometryType.POINT && !feature.points.isEmpty()) {
+                            String cls = feature.className;
+                            if (cls.startsWith("BOY") || cls.startsWith("BCN") || "LIGHTS".equals(cls) || "WRECKS".equals(cls) || "OBSTRN".equals(cls)) {
+                                cm93Markers.add(map.addMarker(new MarkerOptions().position(feature.points.get(0)).title(cls)));
+                                rendered++;
+                            }
+                        } else if (feature.type == Cm93ChartDecoder.GeometryType.SOUNDINGS) {
+                            int stride = Math.max(1, feature.points.size() / 250);
+                            for (int i = 0; i < feature.points.size() && rendered < 12000; i += stride) {
+                                String title = i < feature.depths.size() ? String.format(Locale.US, "SOUNDG %.1f m", feature.depths.get(i)) : "SOUNDG";
+                                cm93Markers.add(map.addMarker(new MarkerOptions().position(feature.points.get(i)).title(title)));
+                                rendered++;
+                            }
+                        }
+                    }
+                    activeChartLabel = "Carta CM93 ativa: " + result.summary() + " • " + rendered + " elementos";
+                    chartStatus.setText(activeChartLabel);
+                    if (!cameraCenteredOnGps) {
+                        try {
+                            LatLngBounds bounds = new LatLngBounds.Builder()
+                                .include(new LatLng(result.minLat, result.minLon))
+                                .include(new LatLng(result.maxLat, result.maxLon))
+                                .build();
+                            map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 48));
+                        } catch (RuntimeException ignored) {}
+                    }
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    chartStatus.setText("Falha CM93: " + error.getMessage());
+                    Toast.makeText(this, "Não foi possível decodificar CM93: " + error.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        }, "SeaTracker-CM93-Decode").start();
     }
 
     private void loadKap(File file, String displayName) {
@@ -1344,13 +1463,18 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             }
 
             int imported = importKapDocumentsRecursive(root, chartsDir, 0, 500);
+            File cm93Dir = new File(chartsDir, "cm93");
+            if (!cm93Dir.exists()) cm93Dir.mkdirs();
+            int cm93Imported = importCm93DocumentsRecursive(root, cm93Dir, 0, 50000, "");
             final int importedCount = imported;
+            final int cm93ImportedCount = cm93Imported;
             runOnUiThread(() -> {
                 refreshKapCatalog();
-                chartStatus.setText("Biblioteca: " + importedCount + " carta(s) KAP/BSB importada(s)");
+                refreshCm93Catalog();
+                chartStatus.setText("Biblioteca: " + importedCount + " KAP/BSB • " + cm93ImportedCount + " CM93");
                 Toast.makeText(
                     this,
-                    "Importação de pasta concluída: " + importedCount + " carta(s).",
+                    "Importação concluída: " + importedCount + " KAP/BSB e " + cm93ImportedCount + " arquivo(s) CM93.",
                     Toast.LENGTH_LONG
                 ).show();
                 showChartLibrary();
@@ -1418,6 +1542,42 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         return imported;
     }
 
+    private int importCm93DocumentsRecursive(DocumentFile directory, File localDir, int depth, int remaining, String prefix) {
+        if (depth > 12 || remaining <= 0) return 0;
+        int imported = 0;
+        for (DocumentFile child : directory.listFiles()) {
+            if (imported >= remaining) break;
+            String name = child.getName();
+            if (name == null) continue;
+            if (child.isDirectory()) {
+                File next = new File(localDir, sanitizeChartFileName(name));
+                if (!next.exists()) next.mkdirs();
+                imported += importCm93DocumentsRecursive(child, next, depth + 1, remaining - imported, prefix + name + "/");
+                continue;
+            }
+            String lower = name.toLowerCase(Locale.ROOT);
+            boolean dictionary = lower.equals("cm93obj.dic") || lower.equals("attrlut.dic") || lower.equals("cm93attr.dic");
+            if (!dictionary && !Cm93ChartDecoder.isCm93CellName(name)) continue;
+            File target = new File(localDir, sanitizeChartFileName(name));
+            File temp = new File(localDir, target.getName() + ".partial");
+            try (InputStream in = getContentResolver().openInputStream(child.getUri()); FileOutputStream out = new FileOutputStream(temp, false)) {
+                if (in == null) continue;
+                byte[] buffer = new byte[128 * 1024];
+                int read; long total = 0;
+                while ((read = in.read(buffer)) != -1) {
+                    total += read;
+                    if (total > 512L * 1024L * 1024L) throw new IllegalStateException("Arquivo CM93 excede 512 MB");
+                    out.write(buffer, 0, read);
+                }
+                out.flush();
+                if (target.exists() && !target.delete()) { temp.delete(); continue; }
+                if (!temp.renameTo(target)) { temp.delete(); continue; }
+                imported++;
+            } catch (Exception ignored) { temp.delete(); }
+        }
+        return imported;
+    }
+
     private String sanitizeChartFileName(String name) {
         String clean = name.replaceAll("[^A-Za-z0-9._-]", "_");
         if (clean.isEmpty()) clean = "chart.kap";
@@ -1433,7 +1593,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         File[] files = chartsDir.listFiles(file -> {
             String lower = file.getName().toLowerCase(Locale.ROOT);
-            return file.isFile() && (lower.endsWith(".kap") || lower.endsWith(".bsb") || lower.endsWith(".mbtiles"));
+            return file.isFile() && (lower.endsWith(".kap") || lower.endsWith(".bsb") || lower.endsWith(".mbtiles") || Cm93ChartDecoder.isCm93CellName(file.getName()));
         });
 
         List<File> charts = new ArrayList<>();
@@ -1446,6 +1606,8 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         labels.add("＋ Importar nova carta");
         labels.add("📁 Importar pasta de cartas");
         for (File file : charts) labels.add(file.getName());
+        int cmLimit = Math.min(200, cm93Catalog.size());
+        for (int i = 0; i < cmLimit; i++) labels.add("CM93 • " + cm93Catalog.get(i).name);
 
         new AlertDialog.Builder(this)
             .setTitle("Biblioteca de Cartas")
@@ -1459,9 +1621,16 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                     return;
                 }
 
-                File selected = charts.get(which - 2);
+                int localIndex = which - 2;
+                if (localIndex >= charts.size()) {
+                    Cm93ChartCatalog.Entry entry = cm93Catalog.get(localIndex - charts.size());
+                    prefs.edit().putString("active_chart_name", entry.name).putString("active_chart_kind", "cm93").putString("active_chart_file", entry.file.getName()).apply();
+                    loadCm93(entry.file, entry.name);
+                    return;
+                }
+                File selected = charts.get(localIndex);
                 String lower = selected.getName().toLowerCase(Locale.ROOT);
-                String kind = lower.endsWith(".mbtiles") ? "mbtiles" : "kap";
+                String kind = lower.endsWith(".mbtiles") ? "mbtiles" : (Cm93ChartDecoder.isCm93CellName(selected.getName()) ? "cm93" : "kap");
                 prefs.edit()
                     .putString("active_chart_name", selected.getName())
                     .putString("active_chart_kind", kind)
@@ -1469,6 +1638,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                     .apply();
 
                 if ("kap".equals(kind)) loadKap(selected, selected.getName());
+                else if ("cm93".equals(kind)) loadCm93(selected, selected.getName());
                 else loadMbTiles(selected, selected.getName());
             })
             .setNegativeButton("Fechar", null)
