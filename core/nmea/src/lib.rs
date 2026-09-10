@@ -177,28 +177,33 @@ pub fn encode_xte_nm(error_nm: f64, steer_right: bool) -> String {
     encode_sentence(&format!("GPXTE,A,A,{:.3},{direction},N", error_nm.abs()))
 }
 
-pub fn encode_rmb(
-    xte_nm: f64,
-    steer_right: bool,
-    origin_id: &str,
-    destination_id: &str,
-    destination_lat: f64,
-    destination_lon: f64,
-    range_nm: f64,
-    bearing_deg: f64,
-    closing_velocity_knots: f64,
-    arrival: bool,
-) -> String {
-    let direction = if steer_right { "R" } else { "L" };
-    let (lat_value, lat_hemi) = encode_coord(destination_lat, true);
-    let (lon_value, lon_hemi) = encode_coord(destination_lon, false);
-    let arrival_flag = if arrival { "A" } else { "V" };
+#[derive(Debug, Clone, PartialEq)]
+pub struct RmbData<'a> {
+    pub xte_nm: f64,
+    pub steer_right: bool,
+    pub origin_id: &'a str,
+    pub destination_id: &'a str,
+    pub destination_lat: f64,
+    pub destination_lon: f64,
+    pub range_nm: f64,
+    pub bearing_deg: f64,
+    pub closing_velocity_knots: f64,
+    pub arrival: bool,
+}
+
+pub fn encode_rmb(data: &RmbData<'_>) -> String {
+    let direction = if data.steer_right { "R" } else { "L" };
+    let (lat_value, lat_hemi) = encode_coord(data.destination_lat, true);
+    let (lon_value, lon_hemi) = encode_coord(data.destination_lon, false);
+    let arrival_flag = if data.arrival { "A" } else { "V" };
     encode_sentence(&format!(
-        "GPRMB,A,{:.3},{direction},{origin_id},{destination_id},{lat_value},{lat_hemi},{lon_value},{lon_hemi},{:.3},{:.1},{:.2},{arrival_flag}",
-        xte_nm.abs(),
-        range_nm.max(0.0),
-        bearing_deg.rem_euclid(360.0),
-        closing_velocity_knots.max(0.0),
+        "GPRMB,A,{:.3},{direction},{},{},{lat_value},{lat_hemi},{lon_value},{lon_hemi},{:.3},{:.1},{:.2},{arrival_flag}",
+        data.xte_nm.abs(),
+        data.origin_id,
+        data.destination_id,
+        data.range_nm.max(0.0),
+        data.bearing_deg.rem_euclid(360.0),
+        data.closing_velocity_knots.max(0.0),
     ))
 }
 
