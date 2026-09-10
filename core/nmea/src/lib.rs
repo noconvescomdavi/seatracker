@@ -480,7 +480,18 @@ mod tests {
         let xte = encode_xte_nm(0.12, true);
         assert!(validate_checksum(&xte));
 
-        let rmb = encode_rmb(0.12, true, "A", "B", -22.9, -43.2, 3.4, 87.0, 8.0, false);
+        let rmb = encode_rmb(&RmbData {
+            xte_nm: 0.12,
+            steer_right: true,
+            origin_id: "A",
+            destination_id: "B",
+            destination_lat: -22.9,
+            destination_lon: -43.2,
+            range_nm: 3.4,
+            bearing_deg: 87.0,
+            closing_velocity_knots: 8.0,
+            arrival: false,
+        });
         assert!(validate_checksum(&rmb));
 
         let apb = encode_apb(0.12, true, 90.0, 88.0, 87.0, "B", false);
