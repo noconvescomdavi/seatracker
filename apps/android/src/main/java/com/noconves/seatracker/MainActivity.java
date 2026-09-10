@@ -36,6 +36,7 @@ import org.maplibre.android.geometry.LatLng;
 import org.maplibre.android.maps.MapLibreMap;
 import org.maplibre.android.maps.MapView;
 import org.maplibre.android.style.layers.RasterLayer;
+import org.maplibre.android.style.sources.ImageSource;
 import org.maplibre.android.style.sources.RasterSource;
 import org.maplibre.android.style.sources.TileSet;
 
@@ -50,6 +51,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private static final int REQ_LOCATION = 40;
     private static final long GPS_STALE_MS = 10_000L;
     private static final String ACTIVE_MBTILES = "active.mbtiles";
+    private static final String ACTIVE_KAP = "active.kap";
     private static final int MAX_TRACK_POINTS = 5_000;
 
     private MapView mapView;
@@ -79,7 +81,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private MbTilesTileServer tileServer;
     private int tileServerPort = -1;
     private int satellitesInView = 0;
-    private String activeChartLabel = "Carta: nenhuma MBTiles carregada";
+    private String activeChartLabel = "Carta: nenhuma carta carregada";
 
     private final Handler gpsHandler = new Handler(Looper.getMainLooper());
     private long lastFixElapsedMs = 0L;
@@ -158,7 +160,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                 redrawWaypoints();
                 redrawTrack();
                 restoreMob();
-                restoreActiveMbTiles();
+                restoreActiveChart();
             });
         });
 
@@ -624,29 +626,41 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     private void importChart(Uri uri) {
         String name = displayName(uri);
-        if (name == null || !name.toLowerCase(Locale.ROOT).endsWith(".mbtiles")) {
-            chartStatus.setText("Carta não carregada: selecione um arquivo .mbtiles");
-            Toast.makeText(
-                this,
-                "O renderer Android validado nesta release usa MBTiles raster.",
-                Toast.LENGTH_LONG
-            ).show();
+        if (name == null) {
+            chartStatus.setText("Carta não carregada: nome do arquivo indisponível");
+            return;
+        }
+
+        String lower = name.toLowerCase(Locale.ROOT);
+        final String kind;
+        if (lower.endsWith(".kap") || lower.endsWith(".bsb")) {
+            kind = "kap";
+        } else if (lower.endsWith(".mbtiles")) {
+            kind = "mbtiles";
+        } else if (lower.endsWith(".nv2")) {
+            chartStatus.setText("NV2 detectado • provider em validação");
+            Toast.makeText(this, "NV2 ainda não possui renderização validada.", Toast.LENGTH_LONG).show();
+            return;
+        } else {
+            chartStatus.setText("Formato ainda não suportado: " + name);
+            Toast.makeText(this, "Selecione KAP/BSB ou MBTiles.", Toast.LENGTH_LONG).show();
             return;
         }
 
         chartStatus.setText("Importando carta " + name + "…");
-        new Thread(() -> copyAndOpenChart(uri, name), "SeaTracker-ChartImport").start();
+        new Thread(() -> copyAndOpenChart(uri, name, kind), "SeaTracker-ChartImport").start();
     }
 
-    private void copyAndOpenChart(Uri uri, String name) {
+    private void copyAndOpenChart(Uri uri, String name, String kind) {
         File chartsDir = new File(getFilesDir(), "charts");
         if (!chartsDir.exists() && !chartsDir.mkdirs()) {
             runOnUiThread(() -> chartStatus.setText("Falha ao criar armazenamento de cartas"));
             return;
         }
 
-        File temp = new File(chartsDir, ACTIVE_MBTILES + ".partial");
-        File target = new File(chartsDir, ACTIVE_MBTILES);
+        String activeName = kind.equals("kap") ? ACTIVE_KAP : ACTIVE_MBTILES;
+        File temp = new File(chartsDir, activeName + ".partial");
+        File target = new File(chartsDir, activeName);
         try (InputStream in = getContentResolver().openInputStream(uri);
              FileOutputStream out = new FileOutputStream(temp, false)) {
             if (in == null) throw new IllegalStateException("Não foi possível abrir a carta");
@@ -669,8 +683,18 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                 throw new IllegalStateException("Não foi possível finalizar a importação");
             }
 
-            prefs.edit().putString("active_chart_name", name).apply();
-            runOnUiThread(() -> loadMbTiles(target, name));
+            prefs.edit()
+                .putString("active_chart_name", name)
+                .putString("active_chart_kind", kind)
+                .apply();
+
+            runOnUiThread(() -> {
+                if (kind.equals("kap")) {
+                    loadKap(target, name);
+                } else {
+                    loadMbTiles(target, name);
+                }
+            });
         } catch (Exception e) {
             temp.delete();
             runOnUiThread(() -> {
@@ -696,11 +720,73 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         return uri.getLastPathSegment();
     }
 
-    private void restoreActiveMbTiles() {
-        File file = new File(new File(getFilesDir(), "charts"), ACTIVE_MBTILES);
-        if (!file.isFile()) return;
-        String name = prefs.getString("active_chart_name", ACTIVE_MBTILES);
-        loadMbTiles(file, name);
+    private void restoreActiveChart() {
+        File chartsDir = new File(getFilesDir(), "charts");
+        String kind = prefs.getString("active_chart_kind", "");
+        String name = prefs.getString("active_chart_name", "Carta");
+
+        if ("kap".equals(kind)) {
+            File file = new File(chartsDir, ACTIVE_KAP);
+            if (file.isFile()) loadKap(file, name);
+            return;
+        }
+
+        if ("mbtiles".equals(kind)) {
+            File file = new File(chartsDir, ACTIVE_MBTILES);
+            if (file.isFile()) loadMbTiles(file, name);
+        }
+    }
+
+    private void loadKap(File file, String displayName) {
+        chartStatus.setText("Decodificando KAP/BSB " + displayName + "…");
+        new Thread(() -> {
+            try {
+                KapChartDecoder.Result result = KapChartDecoder.decode(file);
+                runOnUiThread(() -> {
+                    if (map == null) {
+                        result.bitmap.recycle();
+                        return;
+                    }
+                    map.getStyle(style -> {
+                        if (style.getLayer("chart-raster") != null) style.removeLayer("chart-raster");
+                        if (style.getSource("chart-source") != null) style.removeSource("chart-source");
+
+                        if (tileServer != null) {
+                            tileServer.stop();
+                            tileServer = null;
+                        }
+
+                        ImageSource source = new ImageSource(
+                            "chart-source",
+                            result.quad,
+                            result.bitmap
+                        );
+                        RasterLayer layer = new RasterLayer("chart-raster", "chart-source");
+                        style.addSource(source);
+                        style.addLayer(layer);
+
+                        activeChartLabel = "Carta KAP ativa: " + result.summary();
+                        chartStatus.setText(activeChartLabel);
+
+                        if (!cameraCenteredOnGps) {
+                            map.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                                new LatLng(result.centerLat, result.centerLon),
+                                8.0
+                            ));
+                        }
+                    });
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    chartStatus.setText("Falha KAP/BSB: " + e.getMessage());
+                    Toast.makeText(
+                        this,
+                        "Não foi possível decodificar a carta: " + e.getMessage(),
+                        Toast.LENGTH_LONG
+                    ).show();
+                });
+            }
+        }, "SeaTracker-KAP-Decode").start();
     }
 
     private void loadMbTiles(File file, String displayName) {
