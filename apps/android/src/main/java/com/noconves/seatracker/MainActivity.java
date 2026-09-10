@@ -536,6 +536,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             updateMobStatus(lastNmeaPosition);
             updateRouteGuidance(lastNmeaPosition, lastNmeaSog == null ? 0.0 : lastNmeaSog);
             autoSelectKapForPosition(lastNmeaPosition);
+            autoSelectCm93ForPosition(lastNmeaPosition);
         }
     }
 
