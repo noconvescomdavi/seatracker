@@ -2,6 +2,7 @@ package com.noconves.seatracker;
 
 import android.Manifest;
 import android.app.Activity;
+import androidx.appcompat.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -33,6 +34,7 @@ import org.maplibre.android.annotations.PolylineOptions;
 import org.maplibre.android.camera.CameraPosition;
 import org.maplibre.android.camera.CameraUpdateFactory;
 import org.maplibre.android.geometry.LatLng;
+import org.maplibre.android.geometry.LatLngBounds;
 import org.maplibre.android.maps.MapLibreMap;
 import org.maplibre.android.maps.MapView;
 import org.maplibre.android.style.layers.RasterLayer;
@@ -52,6 +54,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private static final long GPS_STALE_MS = 10_000L;
     private static final String ACTIVE_MBTILES = "active.mbtiles";
     private static final String ACTIVE_KAP = "active.kap";
+    private static final String CHARTS_DIR = "charts";
     private static final int MAX_TRACK_POINTS = 5_000;
 
     private MapView mapView;
@@ -223,7 +226,8 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         });
 
         findViewById(R.id.btnMob).setOnClickListener(v -> activateMob());
-        findViewById(R.id.btnImport).setOnClickListener(v -> chooseChart());
+        findViewById(R.id.btnImport).setOnClickListener(v -> showChartLibrary());
+        findViewById(R.id.btnImport).setOnLongClickListener(v -> { chooseChart(); return true; });
     }
 
     private void requestLocation() {
@@ -652,13 +656,14 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     }
 
     private void copyAndOpenChart(Uri uri, String name, String kind) {
-        File chartsDir = new File(getFilesDir(), "charts");
+        File chartsDir = new File(getFilesDir(), CHARTS_DIR);
         if (!chartsDir.exists() && !chartsDir.mkdirs()) {
             runOnUiThread(() -> chartStatus.setText("Falha ao criar armazenamento de cartas"));
             return;
         }
 
-        String activeName = kind.equals("kap") ? ACTIVE_KAP : ACTIVE_MBTILES;
+        String safeName = sanitizeChartFileName(name);
+        String activeName = kind.equals("kap") ? safeName : ACTIVE_MBTILES;
         File temp = new File(chartsDir, activeName + ".partial");
         File target = new File(chartsDir, activeName);
         try (InputStream in = getContentResolver().openInputStream(uri);
@@ -686,6 +691,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             prefs.edit()
                 .putString("active_chart_name", name)
                 .putString("active_chart_kind", kind)
+                .putString("active_chart_file", target.getName())
                 .apply();
 
             runOnUiThread(() -> {
@@ -721,18 +727,19 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     }
 
     private void restoreActiveChart() {
-        File chartsDir = new File(getFilesDir(), "charts");
+        File chartsDir = new File(getFilesDir(), CHARTS_DIR);
         String kind = prefs.getString("active_chart_kind", "");
         String name = prefs.getString("active_chart_name", "Carta");
+        String fileName = prefs.getString("active_chart_file", "");
 
         if ("kap".equals(kind)) {
-            File file = new File(chartsDir, ACTIVE_KAP);
+            File file = new File(chartsDir, fileName.isEmpty() ? ACTIVE_KAP : fileName);
             if (file.isFile()) loadKap(file, name);
             return;
         }
 
         if ("mbtiles".equals(kind)) {
-            File file = new File(chartsDir, ACTIVE_MBTILES);
+            File file = new File(chartsDir, fileName.isEmpty() ? ACTIVE_MBTILES : fileName);
             if (file.isFile()) loadMbTiles(file, name);
         }
     }
@@ -769,10 +776,11 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                         chartStatus.setText(activeChartLabel);
 
                         if (!cameraCenteredOnGps) {
-                            map.animateCamera(CameraUpdateFactory.newLatLngZoom(
-                                new LatLng(result.centerLat, result.centerLon),
-                                8.0
-                            ));
+                            LatLngBounds bounds = new LatLngBounds.Builder()
+                                .include(new LatLng(result.minLat, result.minLon))
+                                .include(new LatLng(result.maxLat, result.maxLon))
+                                .build();
+                            map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 48));
                         }
                     });
                 });
@@ -830,6 +838,58 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             chartStatus.setText("Carta inválida ou incompatível");
             Toast.makeText(this, "Falha MBTiles: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    private String sanitizeChartFileName(String name) {
+        String clean = name.replaceAll("[^A-Za-z0-9._-]", "_");
+        if (clean.isEmpty()) clean = "chart.kap";
+        return clean;
+    }
+
+    private void showChartLibrary() {
+        File chartsDir = new File(getFilesDir(), CHARTS_DIR);
+        if (!chartsDir.exists() && !chartsDir.mkdirs()) {
+            Toast.makeText(this, "Não foi possível abrir a biblioteca de cartas.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        File[] files = chartsDir.listFiles(file -> {
+            String lower = file.getName().toLowerCase(Locale.ROOT);
+            return file.isFile() && (lower.endsWith(".kap") || lower.endsWith(".bsb") || lower.endsWith(".mbtiles"));
+        });
+
+        List<File> charts = new ArrayList<>();
+        if (files != null) {
+            for (File file : files) charts.add(file);
+            charts.sort((a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+        }
+
+        List<String> labels = new ArrayList<>();
+        labels.add("＋ Importar nova carta");
+        for (File file : charts) labels.add(file.getName());
+
+        new AlertDialog.Builder(this)
+            .setTitle("Biblioteca de Cartas")
+            .setItems(labels.toArray(new String[0]), (dialog, which) -> {
+                if (which == 0) {
+                    chooseChart();
+                    return;
+                }
+
+                File selected = charts.get(which - 1);
+                String lower = selected.getName().toLowerCase(Locale.ROOT);
+                String kind = lower.endsWith(".mbtiles") ? "mbtiles" : "kap";
+                prefs.edit()
+                    .putString("active_chart_name", selected.getName())
+                    .putString("active_chart_kind", kind)
+                    .putString("active_chart_file", selected.getName())
+                    .apply();
+
+                if ("kap".equals(kind)) loadKap(selected, selected.getName());
+                else loadMbTiles(selected, selected.getName());
+            })
+            .setNegativeButton("Fechar", null)
+            .show();
     }
 
     @Override
