@@ -145,7 +145,11 @@ impl DeviationTable {
 
         let (last_h, last_d) = *self.points.last()?;
         let (first_h, first_d) = self.points[0];
-        let wrapped_heading = if heading < first_h { heading + 360.0 } else { heading };
+        let wrapped_heading = if heading < first_h {
+            heading + 360.0
+        } else {
+            heading
+        };
         let wrapped_first = first_h + 360.0;
         let span = wrapped_first - last_h;
         if span <= 0.0 {

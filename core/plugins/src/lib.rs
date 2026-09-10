@@ -126,7 +126,6 @@ pub struct PluginRegistry {
     queue: Vec<PluginEvent>,
 }
 
-
 impl PluginRegistry {
     pub fn register(&mut self, plugin: Box<dyn SeaTrackerPlugin>) -> Result<(), String> {
         let id = plugin.manifest().id.clone();

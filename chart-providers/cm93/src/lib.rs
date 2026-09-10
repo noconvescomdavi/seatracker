@@ -151,7 +151,10 @@ impl Cm93Dictionary {
             let Ok(id) = fields[1].parse::<u32>() else {
                 continue;
             };
-            let geometry = fields[2].chars().next().map(|value| value.to_ascii_uppercase());
+            let geometry = fields[2]
+                .chars()
+                .next()
+                .map(|value| value.to_ascii_uppercase());
             dictionary.object_classes.insert(
                 id,
                 Cm93ObjectClass {
@@ -214,10 +217,7 @@ impl Cm93DatasetIndex {
             self.object_dictionary_found = true;
             return;
         }
-        if matches!(
-            lower.as_str(),
-            "attrlut.dic" | "cm93attr.dic"
-        ) {
+        if matches!(lower.as_str(), "attrlut.dic" | "cm93attr.dic") {
             self.attribute_dictionary_found = true;
             return;
         }
@@ -303,8 +303,7 @@ mod tests {
 
     #[test]
     fn parses_dictionary() {
-        let mut dictionary =
-            Cm93Dictionary::parse_object_dictionary("DEPARE|42|A\nBOYLAT|7|P\n");
+        let mut dictionary = Cm93Dictionary::parse_object_dictionary("DEPARE|42|A\nBOYLAT|7|P\n");
         dictionary.apply_attribute_dictionary("COLOUR|1|unused|aBYTE\n");
         assert_eq!(dictionary.object_classes[&42].code, "DEPARE");
         assert_eq!(

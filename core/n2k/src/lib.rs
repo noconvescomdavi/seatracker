@@ -43,14 +43,38 @@ impl Pgn {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum N2kObservation {
-    Position { latitude: f64, longitude: f64 },
-    CogSog { cog_true_deg: f32, sog_knots: f32 },
-    Heading { heading_deg: f32, magnetic: bool },
-    Depth { meters: f32 },
-    Wind { angle_deg: f32, speed_knots: f32, apparent: bool },
-    EngineRpm { instance: u8, rpm: f32 },
-    BatteryVoltage { instance: u8, volts: f32 },
-    Unknown { pgn: u32, payload: Vec<u8> },
+    Position {
+        latitude: f64,
+        longitude: f64,
+    },
+    CogSog {
+        cog_true_deg: f32,
+        sog_knots: f32,
+    },
+    Heading {
+        heading_deg: f32,
+        magnetic: bool,
+    },
+    Depth {
+        meters: f32,
+    },
+    Wind {
+        angle_deg: f32,
+        speed_knots: f32,
+        apparent: bool,
+    },
+    EngineRpm {
+        instance: u8,
+        rpm: f32,
+    },
+    BatteryVoltage {
+        instance: u8,
+        volts: f32,
+    },
+    Unknown {
+        pgn: u32,
+        payload: Vec<u8>,
+    },
 }
 
 pub trait N2kDecoder {
