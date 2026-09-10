@@ -25,17 +25,11 @@ members = [
   "simulator",
   "tools/nmea-replay",
   "tools/s57-inspector",
-  "tools/nv2-inspector",
   "tools/chart-inspector",
   "core/diagnostics",
   "renderer/core",
   "apps/desktop",
-  "chart-providers/s57",
-  "chart-providers/s63",
   "chart-providers/kap",
   "chart-providers/mbtiles",
-  "chart-providers/cm93",
-  "chart-providers/nv2",
-  "chart-providers/cmap-v3",
-  "chart-providers/navionics-sdk"
+  "chart-providers/cm93"
 ]
