@@ -32,7 +32,11 @@ pub struct Nv2Profile {
 }
 
 impl Nv2Provider {
-    pub fn printable_strings(bytes: &[u8], min_len: usize, max_results: usize) -> Vec<Nv2Observation> {
+    pub fn printable_strings(
+        bytes: &[u8],
+        min_len: usize,
+        max_results: usize,
+    ) -> Vec<Nv2Observation> {
         let mut out = Vec::new();
         let mut start = None;
         for (index, byte) in bytes.iter().copied().enumerate() {
@@ -176,7 +180,12 @@ mod tests {
         assert!(profile.navionics_signature);
         assert!(profile.marine_echart_signature);
         assert!(profile.chart_ids.iter().any(|id| id.contains("S4110778")));
-        assert!(profile.chart_titles.iter().any(|title| title.contains("PANAMA NORTH")));
+        assert!(
+            profile
+                .chart_titles
+                .iter()
+                .any(|title| title.contains("PANAMA NORTH"))
+        );
     }
 
     #[test]
