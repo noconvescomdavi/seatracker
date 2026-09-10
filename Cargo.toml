@@ -14,6 +14,7 @@ members = [
   "core/alarms",
   "core/voyage",
   "core/environment",
+  "core/instruments",
   "core/plugins",
   "core/persistence",
   "simulator",
