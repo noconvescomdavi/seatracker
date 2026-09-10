@@ -1110,6 +1110,9 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             kind = "mbtiles";
         } else if (Cm93ChartDecoder.isCm93CellName(name)) {
             kind = "cm93";
+        } else if (lower.endsWith(".zip")) {
+            importCm93Zip(uri, name);
+            return;
         } else if (lower.endsWith(".nv2")) {
             chartStatus.setText("NV2 detectado • provider em validação");
             Toast.makeText(this, "NV2 ainda não possui renderização validada.", Toast.LENGTH_LONG).show();
@@ -1122,6 +1125,52 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         chartStatus.setText("Importando carta " + name + "…");
         new Thread(() -> copyAndOpenChart(uri, name, kind), "SeaTracker-ChartImport").start();
+    }
+
+    private void importCm93Zip(Uri uri, String name) {
+        chartStatus.setText("Importando dataset CM93 " + name + "…");
+        new Thread(() -> {
+            File chartsDir = new File(getFilesDir(), CHARTS_DIR);
+            File cm93Dir = new File(chartsDir, "cm93");
+            if (!cm93Dir.exists() && !cm93Dir.mkdirs()) {
+                runOnUiThread(() -> chartStatus.setText("Falha ao criar biblioteca CM93"));
+                return;
+            }
+            File archive = new File(chartsDir, "cm93-import.zip");
+            File partial = new File(chartsDir, "cm93-import.zip.partial");
+            try (InputStream in = getContentResolver().openInputStream(uri); FileOutputStream out = new FileOutputStream(partial, false)) {
+                if (in == null) throw new IllegalStateException("Não foi possível abrir o ZIP CM93");
+                byte[] buffer = new byte[128 * 1024];
+                int read; long total = 0L;
+                while ((read = in.read(buffer)) != -1) {
+                    total += read;
+                    if (total > 2L * 1024L * 1024L * 1024L) throw new IllegalStateException("ZIP CM93 excede 2 GB");
+                    out.write(buffer, 0, read);
+                }
+                out.flush();
+                if (archive.exists() && !archive.delete()) throw new IllegalStateException("Falha ao substituir ZIP CM93 anterior");
+                if (!partial.renameTo(archive)) throw new IllegalStateException("Falha ao finalizar ZIP CM93");
+                SafeZipExtractor.Result result = SafeZipExtractor.extractCm93(archive, cm93Dir);
+                runOnUiThread(() -> {
+                    refreshCm93Catalog();
+                    chartStatus.setText("CM93 importado: " + result.cells + " células • " + result.dictionaries + " dicionário(s)");
+                    Toast.makeText(this, "Dataset CM93 pronto: " + result.cells + " células.", Toast.LENGTH_LONG).show();
+                    LatLng own = ownShipPosition();
+                    if (own != null) autoSelectCm93ForPosition(own);
+                    else if (!cm93Catalog.isEmpty()) {
+                        Cm93ChartCatalog.Entry entry = cm93Catalog.get(0);
+                        prefs.edit().putString("active_chart_name", entry.name).putString("active_chart_kind", "cm93").putString("active_chart_file", entry.file.getName()).apply();
+                        loadCm93(entry.file, entry.name);
+                    }
+                });
+            } catch (Exception error) {
+                partial.delete();
+                runOnUiThread(() -> {
+                    chartStatus.setText("Falha no ZIP CM93: " + error.getMessage());
+                    Toast.makeText(this, "Dataset CM93 inválido: " + error.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        }, "SeaTracker-CM93-ZIP-Import").start();
     }
 
     private void copyAndOpenChart(Uri uri, String name, String kind) {
