@@ -296,27 +296,35 @@ mod tests {
     #[test]
     fn router_tracks_sources_and_priority() {
         let mut router = NmeaRouter::default();
-        router.add_source(ConnectionConfig {
-            id: "udp".into(),
-            kind: ConnectionKind::Udp,
-            endpoint: "0.0.0.0:10110".into(),
-            enabled: true,
-            priority: 20,
-        }).unwrap();
-        router.add_source(ConnectionConfig {
-            id: "gps".into(),
-            kind: ConnectionKind::UsbSerial,
-            endpoint: "/dev/ttyUSB0".into(),
-            enabled: true,
-            priority: 10,
-        }).unwrap();
+        router
+            .add_source(ConnectionConfig {
+                id: "udp".into(),
+                kind: ConnectionKind::Udp,
+                endpoint: "0.0.0.0:10110".into(),
+                enabled: true,
+                priority: 20,
+            })
+            .unwrap();
+        router
+            .add_source(ConnectionConfig {
+                id: "gps".into(),
+                kind: ConnectionKind::UsbSerial,
+                endpoint: "/dev/ttyUSB0".into(),
+                enabled: true,
+                priority: 10,
+            })
+            .unwrap();
 
         assert_eq!(router.preferred_source().unwrap().id, "gps");
-        assert!(router.ingest(
-            "udp",
-            "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A",
-            1000
-        ).is_ok());
+        assert!(
+            router
+                .ingest(
+                    "udp",
+                    "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A",
+                    1000
+                )
+                .is_ok()
+        );
         assert_eq!(router.stats("udp").unwrap().valid, 1);
     }
 }

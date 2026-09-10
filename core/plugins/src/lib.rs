@@ -55,19 +55,45 @@ pub struct PluginManifest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PluginEvent {
-    Started { plugin_id: String },
-    Stopped { plugin_id: String },
-    Fault { plugin_id: String, message: String },
-    Nmea0183 { sentence: String, received_at_ms: u64 },
-    SignalKJson { json: String, received_at_ms: u64 },
-    AisSentence { sentence: String, received_at_ms: u64 },
+    Started {
+        plugin_id: String,
+    },
+    Stopped {
+        plugin_id: String,
+    },
+    Fault {
+        plugin_id: String,
+        message: String,
+    },
+    Nmea0183 {
+        sentence: String,
+        received_at_ms: u64,
+    },
+    SignalKJson {
+        json: String,
+        received_at_ms: u64,
+    },
+    AisSentence {
+        sentence: String,
+        received_at_ms: u64,
+    },
     NavigationChanged,
     RouteChanged,
     TrackChanged,
-    AlarmRaised { alarm_id: String, message: String },
-    AlarmCleared { alarm_id: String },
-    ChartChanged { chart_id: String },
-    Diagnostic { category: String, message: String },
+    AlarmRaised {
+        alarm_id: String,
+        message: String,
+    },
+    AlarmCleared {
+        alarm_id: String,
+    },
+    ChartChanged {
+        chart_id: String,
+    },
+    Diagnostic {
+        category: String,
+        message: String,
+    },
 }
 
 pub trait SeaTrackerPlugin {
@@ -136,7 +162,10 @@ impl PluginRegistry {
     }
 
     pub fn manifests(&self) -> Vec<&PluginManifest> {
-        self.plugins.values().map(|plugin| plugin.manifest()).collect()
+        self.plugins
+            .values()
+            .map(|plugin| plugin.manifest())
+            .collect()
     }
 
     pub fn start(&mut self, plugin_id: &str) -> Result<(), String> {
@@ -161,7 +190,8 @@ impl PluginRegistry {
 
         match result {
             Ok(()) => {
-                self.states.insert(plugin_id.to_string(), PluginState::Running);
+                self.states
+                    .insert(plugin_id.to_string(), PluginState::Running);
                 self.emit(PluginEvent::Started {
                     plugin_id: plugin_id.to_string(),
                 });
@@ -187,7 +217,8 @@ impl PluginRegistry {
         let result = plugin.stop(self);
         self.plugins.insert(plugin_id.to_string(), plugin);
         if result.is_ok() {
-            self.states.insert(plugin_id.to_string(), PluginState::Stopped);
+            self.states
+                .insert(plugin_id.to_string(), PluginState::Stopped);
             self.emit(PluginEvent::Stopped {
                 plugin_id: plugin_id.to_string(),
             });
@@ -205,7 +236,8 @@ impl PluginRegistry {
                 continue;
             };
             if let Err(error) = plugin.on_event(&event, self) {
-                self.states.insert(id.clone(), PluginState::Faulted(error.clone()));
+                self.states
+                    .insert(id.clone(), PluginState::Faulted(error.clone()));
                 self.emit(PluginEvent::Fault {
                     plugin_id: id.clone(),
                     message: error,
@@ -233,7 +265,9 @@ impl PluginHost for PluginRegistry {
 }
 
 pub fn permissions_granted(requested: &[Permission], granted: &[Permission]) -> bool {
-    requested.iter().all(|permission| granted.contains(permission))
+    requested
+        .iter()
+        .all(|permission| granted.contains(permission))
 }
 
 #[cfg(test)]
