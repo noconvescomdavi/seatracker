@@ -18,6 +18,8 @@ members = [
   "core/autopilot",
   "core/weather",
   "core/utilities",
+  "core/n2k",
+  "core/signalk",
   "core/plugins",
   "core/persistence",
   "simulator",
