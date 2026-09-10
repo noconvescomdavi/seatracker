@@ -83,6 +83,11 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private Location lastLocation;
     private SharedPreferences prefs;
     private MbTilesTileServer tileServer;
+    private NmeaUdpReceiver nmeaUdpReceiver;
+    private long lastNmeaElapsedMs = 0L;
+    private LatLng lastNmeaPosition;
+    private Float lastNmeaSog;
+    private Float lastNmeaCog;
     private int tileServerPort = -1;
     private int satellitesInView = 0;
     private String activeChartLabel = "Carta: nenhuma carta carregada";
@@ -185,6 +190,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         requestLocation();
+        startNmeaUdp();
         gpsHandler.post(gpsFreshnessWatch);
     }
 
@@ -245,6 +251,72 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             chooseChartFolder();
             return true;
         });
+    }
+
+    private void startNmeaUdp() {
+        nmeaUdpReceiver = new NmeaUdpReceiver(10110, new NmeaUdpReceiver.Listener() {
+            @Override
+            public void onSentence(String sentence, long receivedAtMs) {
+                if (sentence.startsWith("$")) {
+                    Nmea0183Parser.Update update = Nmea0183Parser.parse(sentence);
+                    if (update != null) {
+                        runOnUiThread(() -> applyNmeaUpdate(update));
+                    }
+                }
+            }
+
+            @Override
+            public void onStatus(String message) {
+                runOnUiThread(() -> {
+                    if (!hasFreshGpsFix() && lastNmeaPosition == null) {
+                        cursorStatus.setText(message);
+                    }
+                });
+            }
+        });
+        nmeaUdpReceiver.start();
+    }
+
+    private void applyNmeaUpdate(Nmea0183Parser.Update update) {
+        if (update.latitude != null && update.longitude != null && update.positionValid) {
+            lastNmeaPosition = new LatLng(update.latitude, update.longitude);
+            lastNmeaElapsedMs = SystemClock.elapsedRealtime();
+        }
+        if (update.sogKnots != null) lastNmeaSog = update.sogKnots;
+        if (update.cogDeg != null) lastNmeaCog = update.cogDeg;
+
+        if (!hasFreshGpsFix() && lastNmeaPosition != null && map != null) {
+            if (ownShip == null) {
+                ownShip = map.addMarker(
+                    new MarkerOptions().position(lastNmeaPosition).title("Own Ship • NMEA")
+                );
+            } else {
+                ownShip.setPosition(lastNmeaPosition);
+            }
+
+            if (!cameraCenteredOnGps) {
+                cameraCenteredOnGps = true;
+                map.animateCamera(CameraUpdateFactory.newLatLngZoom(lastNmeaPosition, 12.0));
+            }
+
+            status.setText(String.format(
+                Locale.US,
+                "NMEA UDP • %.6f %.6f • SOG %.1f kn • COG %.0f°",
+                lastNmeaPosition.getLatitude(),
+                lastNmeaPosition.getLongitude(),
+                lastNmeaSog == null ? 0f : lastNmeaSog,
+                lastNmeaCog == null ? 0f : lastNmeaCog
+            ));
+
+            if (tracking) addTrackPoint(lastNmeaPosition);
+            updateMobStatus(lastNmeaPosition);
+        }
+    }
+
+    private boolean hasFreshNmeaFix() {
+        return lastNmeaPosition != null
+            && lastNmeaElapsedMs > 0L
+            && SystemClock.elapsedRealtime() - lastNmeaElapsedMs <= GPS_STALE_MS;
     }
 
     private void requestLocation() {
@@ -334,7 +406,9 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             return;
         }
         if (lastFixElapsedMs == 0L) {
-            status.setText("SeaTracker • procurando sinal GPS…");
+            if (!hasFreshNmeaFix()) {
+                status.setText("SeaTracker • procurando GPS/NMEA…");
+            }
             return;
         }
         long age = SystemClock.elapsedRealtime() - lastFixElapsedMs;
@@ -369,8 +443,13 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     }
 
     private LatLng ownShipPosition() {
-        if (!hasFreshGpsFix()) return null;
-        return new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude());
+        if (hasFreshGpsFix()) {
+            return new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude());
+        }
+        if (hasFreshNmeaFix()) {
+            return lastNmeaPosition;
+        }
+        return null;
     }
 
     private void activateMob() {
@@ -1050,6 +1129,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             }
         }
         if (tileServer != null) tileServer.stop();
+        if (nmeaUdpReceiver != null) nmeaUdpReceiver.close();
         mapView.onDestroy();
         super.onDestroy();
     }
