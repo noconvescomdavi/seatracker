@@ -1,0 +1,32 @@
+name: Clippy diagnostic
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/clippy-diagnostic.yml'
+permissions:
+  contents: write
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Capture clippy output
+        shell: bash
+        run: |
+          set +e
+          cargo clippy --workspace --all-targets -- -D warnings > clippy-diagnostic.txt 2>&1
+          code=$?
+          echo "exit_code=$code" >> clippy-diagnostic.txt
+          exit 0
+      - name: Commit diagnostic
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add clippy-diagnostic.txt
+          git commit -m 'ci: capture clippy diagnostic'
+          git push origin HEAD:main
