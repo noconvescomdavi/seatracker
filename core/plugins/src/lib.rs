@@ -118,6 +118,7 @@ pub enum PluginState {
     Faulted(String),
 }
 
+#[derive(Default)]
 pub struct PluginRegistry {
     plugins: BTreeMap<String, Box<dyn SeaTrackerPlugin>>,
     states: BTreeMap<String, PluginState>,
@@ -125,16 +126,6 @@ pub struct PluginRegistry {
     queue: Vec<PluginEvent>,
 }
 
-impl Default for PluginRegistry {
-    fn default() -> Self {
-        Self {
-            plugins: BTreeMap::new(),
-            states: BTreeMap::new(),
-            grants: BTreeMap::new(),
-            queue: Vec::new(),
-        }
-    }
-}
 
 impl PluginRegistry {
     pub fn register(&mut self, plugin: Box<dyn SeaTrackerPlugin>) -> Result<(), String> {
