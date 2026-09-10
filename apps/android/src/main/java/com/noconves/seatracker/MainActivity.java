@@ -152,6 +152,9 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         mapView = findViewById(R.id.mapView);
         mapView.onCreate(savedInstanceState);
 
+        status.setOnClickListener(v -> showDashboard());
+        chartStatus.setOnClickListener(v -> showChartLibrary());
+
         restorePoints("active_route", routePoints);
         restorePoints("waypoints", waypointPoints);
         restorePoints("active_track", trackPoints);
@@ -196,6 +199,52 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         requestLocation();
         startNmeaUdp();
         gpsHandler.post(gpsFreshnessWatch);
+    }
+
+    private void showDashboard() {
+        LatLng own = ownShipPosition();
+        String source = hasFreshGpsFix() ? "Android GPS/GNSS"
+            : hasFreshNmeaFix() ? "NMEA UDP :10110"
+            : "Sem posição válida";
+        float sog = hasFreshGpsFix() && lastLocation != null && lastLocation.hasSpeed()
+            ? lastLocation.getSpeed() * 1.943844f
+            : lastNmeaSog == null ? 0f : lastNmeaSog;
+        float cog = hasFreshGpsFix() && lastLocation != null && lastLocation.hasBearing()
+            ? lastLocation.getBearing()
+            : lastNmeaCog == null ? 0f : lastNmeaCog;
+
+        String position = own == null
+            ? "--"
+            : String.format(Locale.US, "%.6f, %.6f", own.getLatitude(), own.getLongitude());
+
+        String message = String.format(
+            Locale.US,
+            "Fonte: %s\nPosição: %s\nSOG: %.1f kn\nCOG: %.0f°\nSatélites: %d\nAIS targets: %d\nRota: %d WP / %.2f NM\nTrack: %d pontos\n%s",
+            source,
+            position,
+            sog,
+            cog,
+            satellitesInView,
+            aisMarkers.size(),
+            routePoints.size(),
+            routeDistanceNm(),
+            trackPoints.size(),
+            activeChartLabel
+        );
+
+        new AlertDialog.Builder(this)
+            .setTitle("SeaTracker Dashboard")
+            .setMessage(message)
+            .setPositiveButton("Fechar", null)
+            .show();
+    }
+
+    private double routeDistanceNm() {
+        double total = 0.0;
+        for (int i = 1; i < routePoints.size(); i++) {
+            total += NavigationMath.distanceNm(routePoints.get(i - 1), routePoints.get(i));
+        }
+        return total;
     }
 
     private void configureButtons() {
@@ -610,15 +659,11 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     }
 
     private String routeSummary() {
-        double total = 0.0;
-        for (int i = 1; i < routePoints.size(); i++) {
-            total += NavigationMath.distanceNm(routePoints.get(i - 1), routePoints.get(i));
-        }
         return String.format(
             Locale.US,
             "Rota • %d WP • %.2f NM",
             routePoints.size(),
-            total
+            routeDistanceNm()
         );
     }
 
