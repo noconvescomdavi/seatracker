@@ -1,0 +1,44 @@
+name: Patch chart autoselect
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/patch-chart-autoselect.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Patch chart selection and AIS state
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('apps/android/src/main/java/com/noconves/seatracker/MainActivity.java')
+          s=p.read_text()
+          s=s.replace('    private int dangerousAisTargets = 0;\n', '    private int dangerousAisTargets = 0;\n    private final Map<Integer, Boolean> aisRiskState = new HashMap<>();\n    private List<KapChartCatalog.Entry> kapCatalog = new ArrayList<>();\n    private KapChartCatalog.Entry activeKapEntry;\n    private long lastAutoChartCheckMs = 0L;\n')
+          old='''                if (risk.dangerous) {\n                    dangerousAisTargets++;\n                    cursorStatus.setText(String.format(Locale.US, "ALERTA AIS %09d • CPA %.2f NM • TCPA %.0f min", target.mmsi, risk.cpaNm, risk.tcpaMinutes));\n                }'''
+          new='''                boolean previousRisk = Boolean.TRUE.equals(aisRiskState.put(target.mmsi, risk.dangerous));\n                if (risk.dangerous && !previousRisk) dangerousAisTargets++;\n                if (!risk.dangerous && previousRisk) dangerousAisTargets = Math.max(0, dangerousAisTargets - 1);\n                if (risk.dangerous) {\n                    cursorStatus.setText(String.format(Locale.US, "ALERTA AIS %09d • CPA %.2f NM • TCPA %.0f min", target.mmsi, risk.cpaNm, risk.tcpaMinutes));\n                }'''
+          s=s.replace(old,new)
+          s=s.replace('            updateRouteGuidance(lastNmeaPosition, lastNmeaSog == null ? 0.0 : lastNmeaSog);', '            updateRouteGuidance(lastNmeaPosition, lastNmeaSog == null ? 0.0 : lastNmeaSog);\n            autoSelectKapForPosition(lastNmeaPosition);')
+          s=s.replace('        updateRouteGuidance(position, location.hasSpeed() ? location.getSpeed() * 1.943844 : 0.0);', '        updateRouteGuidance(position, location.hasSpeed() ? location.getSpeed() * 1.943844 : 0.0);\n        autoSelectKapForPosition(position);')
+          s=s.replace('''            runOnUiThread(() -> {\n                if (kind.equals("kap")) {\n                    loadKap(target, name);''','''            runOnUiThread(() -> {\n                if (kind.equals("kap")) {\n                    refreshKapCatalog();\n                    loadKap(target, name);''')
+          s=s.replace('''                chartStatus.setText("Biblioteca: " + importedCount + " carta(s) KAP/BSB importada(s)");''','''                refreshKapCatalog();\n                chartStatus.setText("Biblioteca: " + importedCount + " carta(s) KAP/BSB importada(s)");''')
+          s=s.replace('''    private void restoreActiveChart() {\n        File chartsDir = new File(getFilesDir(), CHARTS_DIR);''','''    private void restoreActiveChart() {\n        refreshKapCatalog();\n        File chartsDir = new File(getFilesDir(), CHARTS_DIR);''')
+          s=s.replace('''    private void loadKap(File file, String displayName) {\n        chartStatus.setText''','''    private void loadKap(File file, String displayName) {\n        for (KapChartCatalog.Entry entry : kapCatalog) {\n            if (entry.file.equals(file)) { activeKapEntry = entry; break; }\n        }\n        chartStatus.setText''')
+          marker='''    private void loadKap(File file, String displayName) {'''
+          helper='''    private void refreshKapCatalog() {\n        kapCatalog = KapChartCatalog.scan(new File(getFilesDir(), CHARTS_DIR));\n    }\n\n    private void autoSelectKapForPosition(LatLng position) {\n        if (position == null || map == null) return;\n        long now = SystemClock.elapsedRealtime();\n        if (now - lastAutoChartCheckMs < 5000L) return;\n        lastAutoChartCheckMs = now;\n        if (kapCatalog.isEmpty()) refreshKapCatalog();\n        KapChartCatalog.Entry best = KapChartCatalog.bestFor(kapCatalog, position, activeKapEntry);\n        if (best == null || best == activeKapEntry) return;\n        activeKapEntry = best;\n        prefs.edit()\n            .putString("active_chart_name", best.name)\n            .putString("active_chart_kind", "kap")\n            .putString("active_chart_file", best.file.getName())\n            .apply();\n        loadKap(best.file, best.name);\n    }\n\n'''+marker
+          s=s.replace(marker,helper)
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/android/src/main/java/com/noconves/seatracker/MainActivity.java
+          git commit -m 'feat(android-charts): auto-select best KAP by vessel position'
+          git push origin HEAD:main
