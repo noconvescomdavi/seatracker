@@ -21,4 +21,5 @@ dependencies {
     implementation("androidx.core:core:1.17.0")
     implementation("androidx.documentfile:documentfile:1.1.0")
     implementation("org.maplibre.gl:android-sdk-opengl:11.8.0")
+    implementation("org.tukaani:xz:1.10")
 }
