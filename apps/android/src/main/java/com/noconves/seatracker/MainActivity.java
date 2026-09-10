@@ -44,8 +44,12 @@ import org.maplibre.android.style.sources.RasterSource;
 import org.maplibre.android.style.sources.TileSet;
 
 import java.io.File;
+import java.io.BufferedReader;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -138,6 +142,19 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             }
             importChartFolder(uri);
         });
+
+    private final ActivityResultLauncher<String[]> gpxImportPicker =
+        registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
+            if (uri != null) importGpx(uri);
+        });
+
+    private final ActivityResultLauncher<String> gpxExportPicker =
+        registerForActivityResult(
+            new ActivityResultContracts.CreateDocument("application/gpx+xml"),
+            uri -> {
+                if (uri != null) exportGpx(uri);
+            }
+        );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -264,8 +281,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             persistPoints("active_route", routePoints);
         });
         routeButton.setOnLongClickListener(v -> {
-            clearRoute();
-            Toast.makeText(this, "Rota apagada.", Toast.LENGTH_SHORT).show();
+            showRouteManager();
             return true;
         });
 
@@ -572,6 +588,114 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             bearing,
             range
         ));
+    }
+
+    private void showRouteManager() {
+        String[] actions = {
+            "Importar GPX",
+            "Exportar rota GPX",
+            "Inverter rota",
+            "Apagar rota"
+        };
+        new AlertDialog.Builder(this)
+            .setTitle("Route Manager")
+            .setItems(actions, (dialog, which) -> {
+                switch (which) {
+                    case 0:
+                        gpxImportPicker.launch(new String[]{
+                            "application/gpx+xml",
+                            "application/xml",
+                            "text/xml",
+                            "text/plain",
+                            "*/*"
+                        });
+                        break;
+                    case 1:
+                        if (routePoints.isEmpty()) {
+                            Toast.makeText(this, "Não há rota para exportar.", Toast.LENGTH_SHORT).show();
+                        } else {
+                            gpxExportPicker.launch("SeaTracker-route.gpx");
+                        }
+                        break;
+                    case 2:
+                        java.util.Collections.reverse(routePoints);
+                        persistPoints("active_route", routePoints);
+                        redrawRoute();
+                        cursorStatus.setText(routeSummary());
+                        break;
+                    case 3:
+                        clearRoute();
+                        Toast.makeText(this, "Rota apagada.", Toast.LENGTH_SHORT).show();
+                        break;
+                    default:
+                        break;
+                }
+            })
+            .setNegativeButton("Fechar", null)
+            .show();
+    }
+
+    private void importGpx(Uri uri) {
+        new Thread(() -> {
+            try (InputStream in = getContentResolver().openInputStream(uri);
+                 BufferedReader reader = new BufferedReader(
+                     new InputStreamReader(in, StandardCharsets.UTF_8)
+                 )) {
+                if (in == null) throw new IllegalStateException("Não foi possível abrir o GPX");
+                StringBuilder xml = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (xml.length() > 8_000_000) {
+                        throw new IllegalStateException("GPX excede o limite de 8 MB");
+                    }
+                    xml.append(line).append('\n');
+                }
+
+                GpxRouteCodec.Data data = GpxRouteCodec.parse(xml.toString());
+                runOnUiThread(() -> {
+                    if (!data.route.isEmpty()) {
+                        routePoints.clear();
+                        routePoints.addAll(data.route);
+                        persistPoints("active_route", routePoints);
+                        redrawRoute();
+                    }
+                    if (!data.waypoints.isEmpty()) {
+                        waypointPoints.addAll(data.waypoints);
+                        persistPoints("waypoints", waypointPoints);
+                        redrawWaypoints();
+                    }
+                    Toast.makeText(
+                        this,
+                        "GPX importado: " + data.route.size() + " ponto(s) de rota e "
+                            + data.waypoints.size() + " waypoint(s).",
+                        Toast.LENGTH_LONG
+                    ).show();
+                    cursorStatus.setText(routeSummary());
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> Toast.makeText(
+                    this,
+                    "Falha GPX: " + error.getMessage(),
+                    Toast.LENGTH_LONG
+                ).show());
+            }
+        }, "SeaTracker-GPX-Import").start();
+    }
+
+    private void exportGpx(Uri uri) {
+        try (OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
+            if (out == null) throw new IllegalStateException("Não foi possível criar o GPX");
+            String xml = GpxRouteCodec.exportRoute("SeaTracker Route", routePoints);
+            out.write(xml.getBytes(StandardCharsets.UTF_8));
+            out.flush();
+            Toast.makeText(this, "Rota GPX exportada.", Toast.LENGTH_LONG).show();
+        } catch (Exception error) {
+            Toast.makeText(
+                this,
+                "Falha ao exportar GPX: " + error.getMessage(),
+                Toast.LENGTH_LONG
+            ).show();
+        }
     }
 
     private void toggleTrack(Button button) {
