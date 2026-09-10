@@ -17,6 +17,7 @@ members = [
   "core/instruments",
   "core/autopilot",
   "core/weather",
+  "core/utilities",
   "core/plugins",
   "core/persistence",
   "simulator",
