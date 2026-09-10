@@ -39,6 +39,10 @@ public final class KapChartDecoder {
         public final String projection;
         public final double centerLat;
         public final double centerLon;
+        public final double minLat;
+        public final double minLon;
+        public final double maxLat;
+        public final double maxLon;
 
         Result(
             String name,
@@ -51,7 +55,11 @@ public final class KapChartDecoder {
             String datum,
             String projection,
             double centerLat,
-            double centerLon
+            double centerLon,
+            double minLat,
+            double minLon,
+            double maxLat,
+            double maxLon
         ) {
             this.name = name;
             this.bitmap = bitmap;
@@ -64,6 +72,10 @@ public final class KapChartDecoder {
             this.projection = projection;
             this.centerLat = centerLat;
             this.centerLon = centerLon;
+            this.minLat = minLat;
+            this.minLon = minLon;
+            this.maxLat = maxLat;
+            this.maxLon = maxLon;
         }
 
         public String summary() {
@@ -147,7 +159,7 @@ public final class KapChartDecoder {
             }
 
             LatLngQuad quad = buildQuad(header);
-            double[] center = center(header.refs);
+            double[] bounds = bounds(header.refs);
             return new Result(
                 header.name,
                 bitmap,
@@ -158,8 +170,12 @@ public final class KapChartDecoder {
                 header.scale,
                 header.datum,
                 header.projection,
-                center[0],
-                center[1]
+                (bounds[0] + bounds[2]) / 2.0,
+                (bounds[1] + bounds[3]) / 2.0,
+                bounds[0],
+                bounds[1],
+                bounds[2],
+                bounds[3]
             );
         }
     }
@@ -361,7 +377,7 @@ public final class KapChartDecoder {
         );
     }
 
-    private static double[] center(List<Reference> refs) {
+    private static double[] bounds(List<Reference> refs) {
         double minLat = Double.POSITIVE_INFINITY;
         double maxLat = Double.NEGATIVE_INFINITY;
         double minLon = Double.POSITIVE_INFINITY;
@@ -372,7 +388,7 @@ public final class KapChartDecoder {
             minLon = Math.min(minLon, ref.lon);
             maxLon = Math.max(maxLon, ref.lon);
         }
-        return new double[]{(minLat + maxLat) / 2.0, (minLon + maxLon) / 2.0};
+        return new double[]{minLat, minLon, maxLat, maxLon};
     }
 
     private static Reference nearest(List<Reference> refs, double x, double y) {
