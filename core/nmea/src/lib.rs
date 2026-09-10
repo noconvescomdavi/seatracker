@@ -136,6 +136,34 @@ pub enum NmeaMessage {
     Gsv {
         satellites_in_view: Option<u8>,
     },
+    Dbt {
+        depth_m: f32,
+    },
+    Dpt {
+        depth_m: f32,
+        offset_m: Option<f32>,
+    },
+    Mtw {
+        temperature_c: f32,
+    },
+    Mwv {
+        angle_deg: f32,
+        speed_knots: f32,
+        relative: bool,
+        valid: bool,
+    },
+    Mwd {
+        direction_true_deg: f32,
+        speed_knots: f32,
+    },
+    Rsa {
+        starboard_rudder_deg: Option<f32>,
+        port_rudder_deg: Option<f32>,
+    },
+    Vlw {
+        total_nm: Option<f32>,
+        trip_nm: Option<f32>,
+    },
     Unsupported(String),
 }
 
@@ -265,6 +293,71 @@ pub fn parse(sentence: &str) -> Result<NmeaMessage, String> {
         }),
         "GSV" => Ok(NmeaMessage::Gsv {
             satellites_in_view: fields.get(3).and_then(|v| v.parse().ok()),
+        }),
+        "DBT" => {
+            let depth_m = fields
+                .get(3)
+                .and_then(|v| v.parse().ok())
+                .or_else(|| fields.get(1).and_then(|v| v.parse::<f32>().ok()).map(|ft| ft * 0.3048))
+                .ok_or("bad depth")?;
+            Ok(NmeaMessage::Dbt { depth_m })
+        }
+        "DPT" => Ok(NmeaMessage::Dpt {
+            depth_m: fields
+                .get(1)
+                .and_then(|v| v.parse().ok())
+                .ok_or("bad depth")?,
+            offset_m: fields.get(2).and_then(|v| v.parse().ok()),
+        }),
+        "MTW" => Ok(NmeaMessage::Mtw {
+            temperature_c: fields
+                .get(1)
+                .and_then(|v| v.parse().ok())
+                .ok_or("bad water temperature")?,
+        }),
+        "MWV" => {
+            let unit = fields.get(4).copied().unwrap_or("N");
+            let raw_speed: f32 = fields
+                .get(3)
+                .and_then(|v| v.parse().ok())
+                .ok_or("bad wind speed")?;
+            let speed_knots = match unit {
+                "N" => raw_speed,
+                "M" => raw_speed * 1.943_844,
+                "K" => raw_speed / 1.852,
+                _ => return Err("unsupported wind speed unit".into()),
+            };
+            Ok(NmeaMessage::Mwv {
+                angle_deg: fields
+                    .get(1)
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("bad wind angle")?,
+                speed_knots,
+                relative: fields.get(2).copied() == Some("R"),
+                valid: fields.get(5).copied() != Some("V"),
+            })
+        }
+        "MWD" => {
+            let speed_knots = fields
+                .get(5)
+                .and_then(|v| v.parse().ok())
+                .or_else(|| fields.get(7).and_then(|v| v.parse::<f32>().ok()).map(|mps| mps * 1.943_844))
+                .ok_or("bad true wind speed")?;
+            Ok(NmeaMessage::Mwd {
+                direction_true_deg: fields
+                    .get(1)
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("bad true wind direction")?,
+                speed_knots,
+            })
+        }
+        "RSA" => Ok(NmeaMessage::Rsa {
+            starboard_rudder_deg: fields.get(1).and_then(|v| v.parse().ok()),
+            port_rudder_deg: fields.get(3).and_then(|v| v.parse().ok()),
+        }),
+        "VLW" => Ok(NmeaMessage::Vlw {
+            total_nm: fields.get(1).and_then(|v| v.parse().ok()),
+            trip_nm: fields.get(3).and_then(|v| v.parse().ok()),
         }),
         _ => Ok(NmeaMessage::Unsupported(msg.into())),
     }
