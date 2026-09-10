@@ -35,5 +35,7 @@ members = [
   "chart-providers/kap",
   "chart-providers/mbtiles",
   "chart-providers/cm93",
-  "chart-providers/nv2"
+  "chart-providers/nv2",
+  "chart-providers/cmap-v3",
+  "chart-providers/navionics-sdk"
 ]
