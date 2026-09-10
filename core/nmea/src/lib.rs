@@ -298,7 +298,12 @@ pub fn parse(sentence: &str) -> Result<NmeaMessage, String> {
             let depth_m = fields
                 .get(3)
                 .and_then(|v| v.parse().ok())
-                .or_else(|| fields.get(1).and_then(|v| v.parse::<f32>().ok()).map(|ft| ft * 0.3048))
+                .or_else(|| {
+                    fields
+                        .get(1)
+                        .and_then(|v| v.parse::<f32>().ok())
+                        .map(|ft| ft * 0.3048)
+                })
                 .ok_or("bad depth")?;
             Ok(NmeaMessage::Dbt { depth_m })
         }
@@ -341,7 +346,12 @@ pub fn parse(sentence: &str) -> Result<NmeaMessage, String> {
             let speed_knots = fields
                 .get(5)
                 .and_then(|v| v.parse().ok())
-                .or_else(|| fields.get(7).and_then(|v| v.parse::<f32>().ok()).map(|mps| mps * 1.943_844))
+                .or_else(|| {
+                    fields
+                        .get(7)
+                        .and_then(|v| v.parse::<f32>().ok())
+                        .map(|mps| mps * 1.943_844)
+                })
                 .ok_or("bad true wind speed")?;
             Ok(NmeaMessage::Mwd {
                 direction_true_deg: fields
