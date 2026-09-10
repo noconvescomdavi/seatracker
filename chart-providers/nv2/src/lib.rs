@@ -60,15 +60,16 @@ impl Nv2Provider {
                 _ => {}
             }
         }
-        if let Some(s) = start {
-            if bytes.len().saturating_sub(s) >= min_len && out.len() < max_results {
-                out.push(Nv2Observation {
-                    offset: s,
-                    length: bytes.len() - s,
-                    evidence: EvidenceLevel::Confirmed,
-                    note: String::from_utf8_lossy(&bytes[s..]).trim().to_string(),
-                });
-            }
+        if let Some(s) = start
+            && bytes.len().saturating_sub(s) >= min_len
+            && out.len() < max_results
+        {
+            out.push(Nv2Observation {
+                offset: s,
+                length: bytes.len() - s,
+                evidence: EvidenceLevel::Confirmed,
+                note: String::from_utf8_lossy(&bytes[s..]).trim().to_string(),
+            });
         }
         out
     }
