@@ -25,6 +25,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.documentfile.provider.DocumentFile;
 
 import org.maplibre.android.MapLibre;
 import org.maplibre.android.annotations.Marker;
@@ -114,6 +115,19 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             Uri uri = result.getData().getData();
             if (uri == null) return;
             importChart(uri);
+        });
+
+    private final ActivityResultLauncher<Uri> chartFolderPicker =
+        registerForActivityResult(new ActivityResultContracts.OpenDocumentTree(), uri -> {
+            if (uri == null) return;
+            try {
+                getContentResolver().takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                );
+            } catch (SecurityException ignored) {
+            }
+            importChartFolder(uri);
         });
 
     @Override
@@ -227,7 +241,10 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         findViewById(R.id.btnMob).setOnClickListener(v -> activateMob());
         findViewById(R.id.btnImport).setOnClickListener(v -> showChartLibrary());
-        findViewById(R.id.btnImport).setOnLongClickListener(v -> { chooseChart(); return true; });
+        findViewById(R.id.btnImport).setOnLongClickListener(v -> {
+            chooseChartFolder();
+            return true;
+        });
     }
 
     private void requestLocation() {
@@ -840,6 +857,99 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         }
     }
 
+    private void chooseChartFolder() {
+        chartFolderPicker.launch(null);
+    }
+
+    private void importChartFolder(Uri treeUri) {
+        chartStatus.setText("Indexando pasta de cartas…");
+        new Thread(() -> {
+            DocumentFile root = DocumentFile.fromTreeUri(this, treeUri);
+            if (root == null || !root.isDirectory()) {
+                runOnUiThread(() -> chartStatus.setText("Pasta de cartas inválida"));
+                return;
+            }
+
+            File chartsDir = new File(getFilesDir(), CHARTS_DIR);
+            if (!chartsDir.exists() && !chartsDir.mkdirs()) {
+                runOnUiThread(() -> chartStatus.setText("Falha ao criar biblioteca local"));
+                return;
+            }
+
+            int imported = importKapDocumentsRecursive(root, chartsDir, 0, 500);
+            final int importedCount = imported;
+            runOnUiThread(() -> {
+                chartStatus.setText("Biblioteca: " + importedCount + " carta(s) KAP/BSB importada(s)");
+                Toast.makeText(
+                    this,
+                    "Importação de pasta concluída: " + importedCount + " carta(s).",
+                    Toast.LENGTH_LONG
+                ).show();
+                showChartLibrary();
+            });
+        }, "SeaTracker-ChartFolderImport").start();
+    }
+
+    private int importKapDocumentsRecursive(
+        DocumentFile directory,
+        File chartsDir,
+        int depth,
+        int remaining
+    ) {
+        if (depth > 8 || remaining <= 0) return 0;
+        int imported = 0;
+
+        for (DocumentFile child : directory.listFiles()) {
+            if (imported >= remaining) break;
+            if (child.isDirectory()) {
+                imported += importKapDocumentsRecursive(
+                    child,
+                    chartsDir,
+                    depth + 1,
+                    remaining - imported
+                );
+                continue;
+            }
+
+            String name = child.getName();
+            if (name == null) continue;
+            String lower = name.toLowerCase(Locale.ROOT);
+            if (!lower.endsWith(".kap") && !lower.endsWith(".bsb")) continue;
+
+            File target = new File(chartsDir, sanitizeChartFileName(name));
+            File temp = new File(chartsDir, target.getName() + ".partial");
+
+            try (InputStream in = getContentResolver().openInputStream(child.getUri());
+                 FileOutputStream out = new FileOutputStream(temp, false)) {
+                if (in == null) continue;
+                byte[] buffer = new byte[128 * 1024];
+                int read;
+                long total = 0L;
+                while ((read = in.read(buffer)) != -1) {
+                    total += read;
+                    if (total > 2L * 1024L * 1024L * 1024L) {
+                        throw new IllegalStateException("Carta individual excede 2 GB");
+                    }
+                    out.write(buffer, 0, read);
+                }
+                out.flush();
+
+                if (target.exists() && !target.delete()) {
+                    temp.delete();
+                    continue;
+                }
+                if (!temp.renameTo(target)) {
+                    temp.delete();
+                    continue;
+                }
+                imported++;
+            } catch (Exception ignored) {
+                temp.delete();
+            }
+        }
+        return imported;
+    }
+
     private String sanitizeChartFileName(String name) {
         String clean = name.replaceAll("[^A-Za-z0-9._-]", "_");
         if (clean.isEmpty()) clean = "chart.kap";
@@ -866,6 +976,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         List<String> labels = new ArrayList<>();
         labels.add("＋ Importar nova carta");
+        labels.add("📁 Importar pasta de cartas");
         for (File file : charts) labels.add(file.getName());
 
         new AlertDialog.Builder(this)
@@ -875,8 +986,12 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                     chooseChart();
                     return;
                 }
+                if (which == 1) {
+                    chooseChartFolder();
+                    return;
+                }
 
-                File selected = charts.get(which - 1);
+                File selected = charts.get(which - 2);
                 String lower = selected.getName().toLowerCase(Locale.ROOT);
                 String kind = lower.endsWith(".mbtiles") ? "mbtiles" : "kap";
                 prefs.edit()
