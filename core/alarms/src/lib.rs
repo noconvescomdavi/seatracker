@@ -128,8 +128,10 @@ mod tests {
             validity: DataValidity::Valid,
             ..NavigationState::default()
         };
-        let mut cfg = AlarmConfig::default();
-        cfg.anchor_radius_nm = 0.2;
+        let cfg = AlarmConfig {
+            anchor_radius_nm: 0.2,
+            ..AlarmConfig::default()
+        };
         assert_eq!(anchor_watch_alarm(0.0, 0.0, &own, &cfg), Some(true));
     }
 
