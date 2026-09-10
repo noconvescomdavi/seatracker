@@ -47,8 +47,10 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity implements LocationListener {
     private static final int REQ_LOCATION = 40;
@@ -88,6 +90,8 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private LatLng lastNmeaPosition;
     private Float lastNmeaSog;
     private Float lastNmeaCog;
+    private final AisDecoder aisDecoder = new AisDecoder();
+    private final Map<Integer, Marker> aisMarkers = new HashMap<>();
     private int tileServerPort = -1;
     private int satellitesInView = 0;
     private String activeChartLabel = "Carta: nenhuma carta carregada";
@@ -262,6 +266,11 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                     if (update != null) {
                         runOnUiThread(() -> applyNmeaUpdate(update));
                     }
+                } else if (sentence.startsWith("!")) {
+                    AisDecoder.Target target = aisDecoder.push(sentence, receivedAtMs);
+                    if (target != null && target.hasPosition()) {
+                        runOnUiThread(() -> applyAisTarget(target));
+                    }
                 }
             }
 
@@ -275,6 +284,27 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             }
         });
         nmeaUdpReceiver.start();
+    }
+
+    private void applyAisTarget(AisDecoder.Target target) {
+        if (map == null || target.latitude == null || target.longitude == null) return;
+        LatLng position = new LatLng(target.latitude, target.longitude);
+        Marker marker = aisMarkers.get(target.mmsi);
+        String title = String.format(
+            Locale.US,
+            "AIS %09d • SOG %.1f kn • COG %.0f°",
+            target.mmsi,
+            target.sogKnots == null ? 0f : target.sogKnots,
+            target.cogDeg == null ? 0f : target.cogDeg
+        );
+        if (marker == null) {
+            marker = map.addMarker(new MarkerOptions().position(position).title(title));
+            aisMarkers.put(target.mmsi, marker);
+        } else {
+            marker.setPosition(position);
+            marker.setTitle(title);
+        }
+        aisDecoder.discardStale(System.currentTimeMillis(), 180_000L);
     }
 
     private void applyNmeaUpdate(Nmea0183Parser.Update update) {
