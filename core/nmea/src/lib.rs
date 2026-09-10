@@ -1,3 +1,99 @@
+use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ConnectionKind {
+    Serial,
+    TcpClient,
+    TcpServer,
+    Udp,
+    Bluetooth,
+    UsbSerial,
+    Replay,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectionConfig {
+    pub id: String,
+    pub kind: ConnectionKind,
+    pub endpoint: String,
+    pub enabled: bool,
+    pub priority: u8,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct NmeaSourceStats {
+    pub received: u64,
+    pub valid: u64,
+    pub invalid: u64,
+    pub last_received_at_ms: Option<u64>,
+}
+
+#[derive(Debug, Default)]
+pub struct NmeaRouter {
+    sources: BTreeMap<String, ConnectionConfig>,
+    stats: BTreeMap<String, NmeaSourceStats>,
+}
+
+impl NmeaRouter {
+    pub fn add_source(&mut self, config: ConnectionConfig) -> Result<(), String> {
+        if config.id.trim().is_empty() {
+            return Err("connection id cannot be empty".into());
+        }
+        self.sources.insert(config.id.clone(), config);
+        Ok(())
+    }
+
+    pub fn remove_source(&mut self, id: &str) {
+        self.sources.remove(id);
+        self.stats.remove(id);
+    }
+
+    pub fn sources(&self) -> impl Iterator<Item = &ConnectionConfig> {
+        self.sources.values()
+    }
+
+    pub fn stats(&self, id: &str) -> Option<&NmeaSourceStats> {
+        self.stats.get(id)
+    }
+
+    pub fn ingest(
+        &mut self,
+        source_id: &str,
+        sentence: &str,
+        received_at_ms: u64,
+    ) -> Result<NmeaMessage, String> {
+        let config = self
+            .sources
+            .get(source_id)
+            .ok_or_else(|| format!("unknown NMEA source: {source_id}"))?;
+        if !config.enabled {
+            return Err(format!("NMEA source disabled: {source_id}"));
+        }
+
+        let stats = self.stats.entry(source_id.to_string()).or_default();
+        stats.received = stats.received.saturating_add(1);
+        stats.last_received_at_ms = Some(received_at_ms);
+
+        match parse(sentence) {
+            Ok(message) => {
+                stats.valid = stats.valid.saturating_add(1);
+                Ok(message)
+            }
+            Err(error) => {
+                stats.invalid = stats.invalid.saturating_add(1);
+                Err(error)
+            }
+        }
+    }
+
+    pub fn preferred_source(&self) -> Option<&ConnectionConfig> {
+        self.sources
+            .values()
+            .filter(|source| source.enabled)
+            .min_by_key(|source| source.priority)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum NmeaMessage {
     Rmc {
@@ -195,5 +291,32 @@ mod tests {
     #[test]
     fn rejects_bad_checksum() {
         assert!(parse("$GPRMC,1,A,1,N,1,E,1,1,1*00").is_err());
+    }
+
+    #[test]
+    fn router_tracks_sources_and_priority() {
+        let mut router = NmeaRouter::default();
+        router.add_source(ConnectionConfig {
+            id: "udp".into(),
+            kind: ConnectionKind::Udp,
+            endpoint: "0.0.0.0:10110".into(),
+            enabled: true,
+            priority: 20,
+        }).unwrap();
+        router.add_source(ConnectionConfig {
+            id: "gps".into(),
+            kind: ConnectionKind::UsbSerial,
+            endpoint: "/dev/ttyUSB0".into(),
+            enabled: true,
+            priority: 10,
+        }).unwrap();
+
+        assert_eq!(router.preferred_source().unwrap().id, "gps");
+        assert!(router.ingest(
+            "udp",
+            "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A",
+            1000
+        ).is_ok());
+        assert_eq!(router.stats("udp").unwrap().valid, 1);
     }
 }
