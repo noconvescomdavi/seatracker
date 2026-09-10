@@ -105,6 +105,10 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private boolean routeActive = false;
     private RouteNavigator.Guidance routeGuidance;
     private int dangerousAisTargets = 0;
+    private final Map<Integer, Boolean> aisRiskState = new HashMap<>();
+    private List<KapChartCatalog.Entry> kapCatalog = new ArrayList<>();
+    private KapChartCatalog.Entry activeKapEntry;
+    private long lastAutoChartCheckMs = 0L;
     private int tileServerPort = -1;
     private int satellitesInView = 0;
     private String activeChartLabel = "Carta: nenhuma carta carregada";
@@ -471,8 +475,10 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             AisCollisionMonitor.Risk risk = AisCollisionMonitor.calculate(own, ownSog, ownCog, position, target.sogKnots, target.cogDeg, 0.5, 30.0);
             if (risk != null) {
                 title += String.format(Locale.US, " • CPA %.2f NM • TCPA %.0f min%s", risk.cpaNm, risk.tcpaMinutes, risk.dangerous ? " • RISCO" : "");
+                boolean previousRisk = Boolean.TRUE.equals(aisRiskState.put(target.mmsi, risk.dangerous));
+                if (risk.dangerous && !previousRisk) dangerousAisTargets++;
+                if (!risk.dangerous && previousRisk) dangerousAisTargets = Math.max(0, dangerousAisTargets - 1);
                 if (risk.dangerous) {
-                    dangerousAisTargets++;
                     cursorStatus.setText(String.format(Locale.US, "ALERTA AIS %09d • CPA %.2f NM • TCPA %.0f min", target.mmsi, risk.cpaNm, risk.tcpaMinutes));
                 }
             }
@@ -522,6 +528,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             if (tracking) addTrackPoint(lastNmeaPosition);
             updateMobStatus(lastNmeaPosition);
             updateRouteGuidance(lastNmeaPosition, lastNmeaSog == null ? 0.0 : lastNmeaSog);
+            autoSelectKapForPosition(lastNmeaPosition);
         }
     }
 
@@ -607,6 +614,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         updateMobStatus(position);
         updateRouteGuidance(position, location.hasSpeed() ? location.getSpeed() * 1.943844 : 0.0);
+        autoSelectKapForPosition(position);
     }
 
     private void updateGpsFreshnessUi() {
@@ -1146,6 +1154,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
             runOnUiThread(() -> {
                 if (kind.equals("kap")) {
+                    refreshKapCatalog();
                     loadKap(target, name);
                 } else {
                     loadMbTiles(target, name);
@@ -1177,6 +1186,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     }
 
     private void restoreActiveChart() {
+        refreshKapCatalog();
         File chartsDir = new File(getFilesDir(), CHARTS_DIR);
         String kind = prefs.getString("active_chart_kind", "");
         String name = prefs.getString("active_chart_name", "Carta");
@@ -1194,7 +1204,31 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         }
     }
 
+    private void refreshKapCatalog() {
+        kapCatalog = KapChartCatalog.scan(new File(getFilesDir(), CHARTS_DIR));
+    }
+
+    private void autoSelectKapForPosition(LatLng position) {
+        if (position == null || map == null) return;
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastAutoChartCheckMs < 5000L) return;
+        lastAutoChartCheckMs = now;
+        if (kapCatalog.isEmpty()) refreshKapCatalog();
+        KapChartCatalog.Entry best = KapChartCatalog.bestFor(kapCatalog, position, activeKapEntry);
+        if (best == null || best == activeKapEntry) return;
+        activeKapEntry = best;
+        prefs.edit()
+            .putString("active_chart_name", best.name)
+            .putString("active_chart_kind", "kap")
+            .putString("active_chart_file", best.file.getName())
+            .apply();
+        loadKap(best.file, best.name);
+    }
+
     private void loadKap(File file, String displayName) {
+        for (KapChartCatalog.Entry entry : kapCatalog) {
+            if (entry.file.equals(file)) { activeKapEntry = entry; break; }
+        }
         chartStatus.setText("Decodificando KAP/BSB " + displayName + "…");
         new Thread(() -> {
             try {
@@ -1312,6 +1346,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             int imported = importKapDocumentsRecursive(root, chartsDir, 0, 500);
             final int importedCount = imported;
             runOnUiThread(() -> {
+                refreshKapCatalog();
                 chartStatus.setText("Biblioteca: " + importedCount + " carta(s) KAP/BSB importada(s)");
                 Toast.makeText(
                     this,
