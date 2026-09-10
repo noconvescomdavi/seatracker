@@ -104,7 +104,7 @@ impl Cm93CellName {
     }
 
     pub fn approximate_origin_deg(&self) -> (f64, f64) {
-        let lat = (self.latitude_index as f64 - 240.0) / 3.0;
+        let lat = (self.latitude_index as f64 - 270.0) / 3.0;
         let mut lon = self.longitude_index as f64 / 3.0;
         if lon >= 180.0 {
             lon -= 360.0;
