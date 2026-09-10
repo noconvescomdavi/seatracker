@@ -6,6 +6,7 @@ on:
     branches: [ main ]
     paths:
       - 'core/**/*.rs'
+      - '.github/workflows/normalize-rust.yml'
 
 permissions:
   contents: write
