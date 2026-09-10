@@ -1,0 +1,108 @@
+[1m[92m    Updating[0m crates.io index
+[1m[92m     Locking[0m 48 packages to latest compatible versions
+[1m[92m      Adding[0m generic-array v0.14.7 [1m[33m(available: v0.14.9)[0m
+[1m[92m      Adding[0m quick-xml v0.38.4 [1m[33m(available: v0.42.0)[0m
+[1m[92m      Adding[0m rusqlite v0.38.0 [1m[33m(available: v0.40.2)[0m
+[1m[92m      Adding[0m sha2 v0.10.9 [1m[33m(available: v0.11.0)[0m
+[1m[92m Downloading[0m crates ...
+[1m[92m  Downloaded[0m cfg-if v1.0.4
+[1m[92m  Downloaded[0m cpufeatures v0.2.17
+[1m[92m  Downloaded[0m block-buffer v0.10.4
+[1m[92m  Downloaded[0m bitflags v2.13.2
+[1m[92m  Downloaded[0m cc v1.4.5
+[1m[92m  Downloaded[0m crypto-common v0.1.7
+[1m[92m  Downloaded[0m itoa v1.0.18
+[1m[92m  Downloaded[0m fallible-streaming-iterator v0.1.9
+[1m[92m  Downloaded[0m find-msvc-tools v0.1.12
+[1m[92m  Downloaded[0m generic-array v0.14.7
+[1m[92m  Downloaded[0m version_check v0.9.5
+[1m[92m  Downloaded[0m fallible-iterator v0.3.0
+[1m[92m  Downloaded[0m shlex v2.0.1
+[1m[92m  Downloaded[0m smallvec v1.16.0
+[1m[92m  Downloaded[0m digest v0.10.7
+[1m[92m  Downloaded[0m pkg-config v0.3.34
+[1m[92m  Downloaded[0m quote v1.0.47
+[1m[92m  Downloaded[0m sha2 v0.10.9
+[1m[92m  Downloaded[0m zmij v1.0.23
+[1m[92m  Downloaded[0m hashlink v0.11.1
+[1m[92m  Downloaded[0m proc-macro2 v1.0.107
+[1m[92m  Downloaded[0m serde_core v1.0.229
+[1m[92m  Downloaded[0m foldhash v0.2.0
+[1m[92m  Downloaded[0m serde_derive v1.0.229
+[1m[92m  Downloaded[0m unicode-ident v1.0.24
+[1m[92m  Downloaded[0m memchr v2.8.3
+[1m[92m  Downloaded[0m typenum v1.20.1
+[1m[92m  Downloaded[0m serde v1.0.229
+[1m[92m  Downloaded[0m hashbrown v0.16.1
+[1m[92m  Downloaded[0m serde_json v1.0.151
+[1m[92m  Downloaded[0m rusqlite v0.38.0
+[1m[92m  Downloaded[0m quick-xml v0.38.4
+[1m[92m  Downloaded[0m vcpkg v0.2.15
+[1m[92m  Downloaded[0m syn v3.0.5
+[1m[92m  Downloaded[0m libsqlite3-sys v0.36.0
+[1m[92m   Compiling[0m serde_core v1.0.229
+[1m[92m   Compiling[0m proc-macro2 v1.0.107
+[1m[92m   Compiling[0m quote v1.0.47
+[1m[92m   Compiling[0m unicode-ident v1.0.24
+[1m[92m   Compiling[0m serde v1.0.229
+[1m[92m   Compiling[0m version_check v0.9.5
+[1m[92m   Compiling[0m shlex v2.0.1
+[1m[92m   Compiling[0m find-msvc-tools v0.1.12
+[1m[92m   Compiling[0m generic-array v0.14.7
+[1m[92m   Compiling[0m cc v1.4.5
+[1m[92m   Compiling[0m vcpkg v0.2.15
+[1m[92m   Compiling[0m syn v3.0.5
+[1m[92m   Compiling[0m pkg-config v0.3.34
+[1m[92m    Checking[0m foldhash v0.2.0
+[1m[92m    Checking[0m typenum v1.20.1
+[1m[92m   Compiling[0m libsqlite3-sys v0.36.0
+[1m[92m    Checking[0m hashbrown v0.16.1
+[1m[92m    Checking[0m hashlink v0.11.1
+[1m[92m    Checking[0m bitflags v2.13.2
+[1m[92m    Checking[0m smallvec v1.16.0
+[1m[92m    Checking[0m fallible-streaming-iterator v0.1.9
+[1m[92m    Checking[0m fallible-iterator v0.3.0
+[1m[92m    Checking[0m crypto-common v0.1.7
+[1m[92m    Checking[0m block-buffer v0.10.4
+[1m[92m    Checking[0m memchr v2.8.3
+[1m[92m    Checking[0m digest v0.10.7
+[1m[92m    Checking[0m cpufeatures v0.2.17
+[1m[92m    Checking[0m cfg-if v1.0.4
+[1m[92m    Checking[0m sha2 v0.10.9
+[1m[92m   Compiling[0m serde_derive v1.0.229
+[1m[92m    Checking[0m seatracker-geographic v0.1.0 (/home/runner/work/seatracker/seatracker/core/geographic)
+[1m[92m    Checking[0m seatracker-navigation v0.1.0 (/home/runner/work/seatracker/seatracker/core/navigation)
+[1m[92m   Compiling[0m zmij v1.0.23
+[1m[92m   Compiling[0m serde_json v1.0.151
+[1m[92m    Checking[0m seatracker-nmea v0.1.0 (/home/runner/work/seatracker/seatracker/core/nmea)
+[1m[92m    Checking[0m itoa v1.0.18
+[1m[92m    Checking[0m seatracker-gps v0.1.0 (/home/runner/work/seatracker/seatracker/core/gps)
+[1m[92m    Checking[0m seatracker-ais v0.1.0 (/home/runner/work/seatracker/seatracker/core/ais)
+[1m[92m    Checking[0m seatracker-alarms v0.1.0 (/home/runner/work/seatracker/seatracker/core/alarms)
+[1m[92m    Checking[0m seatracker-simulator v0.1.0 (/home/runner/work/seatracker/seatracker/simulator)
+[1m[92m    Checking[0m seatracker-nmea-replay v0.1.0 (/home/runner/work/seatracker/seatracker/tools/nmea-replay)
+[1m[92m    Checking[0m seatracker-instruments v0.1.0 (/home/runner/work/seatracker/seatracker/core/instruments)
+[1m[92m    Checking[0m seatracker-autopilot v0.1.0 (/home/runner/work/seatracker/seatracker/core/autopilot)
+[1m[92m    Checking[0m seatracker-utilities v0.1.0 (/home/runner/work/seatracker/seatracker/core/utilities)
+[1m[92m    Checking[0m seatracker-signalk v0.1.0 (/home/runner/work/seatracker/seatracker/core/signalk)
+[1m[91merror[E0061][0m[1m: this function takes 1 argument but 10 arguments were supplied[0m
+   [1m[94m--> [0mcore/nmea/src/lib.rs:483:19
+    [1m[94m|[0m
+[1m[94m483[0m [1m[94m|[0m         let rmb = encode_rmb(0.12, true, "A", "B", -22.9, -43.2, 3.4, 87.0, 8.0, false);
+    [1m[94m|[0m                   [1m[91m^^^^^^^^^^[0m [1m[94m----[0m [1m[94mexpected `&RmbData<'_>`, found floating-point number[0m
+    [1m[94m|[0m
+[1m[92mnote[0m: function defined here
+   [1m[94m--> [0mcore/nmea/src/lib.rs:194:8
+    [1m[94m|[0m
+[1m[94m194[0m [1m[94m|[0m pub fn encode_rmb(data: &RmbData<'_>) -> String {
+    [1m[94m|[0m        [1m[92m^^^^^^^^^^[0m [1m[94m------------------[0m
+[1m[96mhelp[0m: remove the extra arguments
+    [1m[94m|[0m
+[1m[94m483[0m [91m- [0m        let rmb = encode_rmb([91m0.12, true, "A", "B", -22.9, -43.2, 3.4, 87.0, 8.0, false[0m);
+[1m[94m483[0m [92m+ [0m        let rmb = encode_rmb([92m/* &RmbData<'_> */[0m);
+    [1m[94m|[0m
+
+[1mFor more information about this error, try `rustc --explain E0061`.[0m
+[1m[91merror[0m: could not compile `seatracker-nmea` (lib test) due to 1 previous error
+[1m[33mwarning[0m: build failed, waiting for other jobs to finish...
+exit_code=101
