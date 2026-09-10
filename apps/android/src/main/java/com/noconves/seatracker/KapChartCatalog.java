@@ -10,8 +10,13 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class KapChartCatalog {
+    private static final Pattern BSB_RA = Pattern.compile("(?:^|,)RA\\s*=\\s*(\\d+)\\s*,\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BSB_NA = Pattern.compile("(?:^|,)NA\\s*=\\s*(.*?)(?=,(?:NU|RA|DU|KNP|REF|PLY|DTM|IFM|RGB|DAY|NIGHT)\\s*=|$)", Pattern.CASE_INSENSITIVE);
+
     public static final class Entry {
         public final File file;
         public final String name;
@@ -80,17 +85,16 @@ public final class KapChartCatalog {
         for (String line : text.split("\n")) {
             String trimmed = line.trim();
             if (trimmed.startsWith("BSB/")) {
-                for (String token : trimmed.substring(4).split(",")) {
-                    String[] pair = token.split("=", 2);
-                    if (pair.length != 2) continue;
-                    if (pair[0].trim().equalsIgnoreCase("NA")) name = pair[1].trim();
-                    if (pair[0].trim().equalsIgnoreCase("RA")) {
-                        String[] dims = pair[1].split(",");
-                        if (dims.length >= 2) {
-                            width = parseInt(dims[0], width);
-                            height = parseInt(dims[1], height);
-                        }
-                    }
+                String body = trimmed.substring(4);
+                Matcher nameMatch = BSB_NA.matcher(body);
+                if (nameMatch.find()) {
+                    String parsed = nameMatch.group(1).trim();
+                    if (!parsed.isEmpty()) name = parsed;
+                }
+                Matcher raMatch = BSB_RA.matcher(body);
+                if (raMatch.find()) {
+                    width = parseInt(raMatch.group(1), width);
+                    height = parseInt(raMatch.group(2), height);
                 }
             } else if (trimmed.startsWith("KNP/")) {
                 for (String token : trimmed.substring(4).split(",")) {
