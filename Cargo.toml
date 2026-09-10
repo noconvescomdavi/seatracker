@@ -15,6 +15,7 @@ members = [
   "core/voyage",
   "core/environment",
   "core/instruments",
+  "core/autopilot",
   "core/plugins",
   "core/persistence",
   "simulator",
