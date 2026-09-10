@@ -1,4 +1,4 @@
-use seatracker_nmea::{encode_apb, encode_rmb, encode_xte_nm};
+use seatracker_nmea::{RmbData, encode_apb, encode_rmb, encode_xte_nm};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AutopilotState {
@@ -73,18 +73,18 @@ impl<T: AutopilotTransport> AutopilotController<T> {
 
         let sentences = [
             encode_xte_nm(guidance.xte_nm, guidance.steer_right),
-            encode_rmb(
-                guidance.xte_nm,
-                guidance.steer_right,
-                &guidance.origin_id,
-                &guidance.destination_id,
-                guidance.destination_lat,
-                guidance.destination_lon,
-                guidance.range_nm,
-                guidance.bearing_present_to_destination_deg,
-                guidance.closing_velocity_knots,
-                guidance.arrival_circle_entered,
-            ),
+            encode_rmb(&RmbData {
+                xte_nm: guidance.xte_nm,
+                steer_right: guidance.steer_right,
+                origin_id: &guidance.origin_id,
+                destination_id: &guidance.destination_id,
+                destination_lat: guidance.destination_lat,
+                destination_lon: guidance.destination_lon,
+                range_nm: guidance.range_nm,
+                bearing_deg: guidance.bearing_present_to_destination_deg,
+                closing_velocity_knots: guidance.closing_velocity_knots,
+                arrival: guidance.arrival_circle_entered,
+            }),
             encode_apb(
                 guidance.xte_nm,
                 guidance.steer_right,
