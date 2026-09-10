@@ -101,6 +101,10 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private String lastNmeaSource = "NMEA UDP :10110";
     private final AisDecoder aisDecoder = new AisDecoder();
     private final Map<Integer, Marker> aisMarkers = new HashMap<>();
+    private final RouteNavigator routeNavigator = new RouteNavigator();
+    private boolean routeActive = false;
+    private RouteNavigator.Guidance routeGuidance;
+    private int dangerousAisTargets = 0;
     private int tileServerPort = -1;
     private int satellitesInView = 0;
     private String activeChartLabel = "Carta: nenhuma carta carregada";
@@ -246,15 +250,17 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         String message = String.format(
             Locale.US,
-            "Fonte: %s\nPosição: %s\nSOG: %.1f kn\nCOG: %.0f°\nSatélites: %d\nAIS targets: %d\nRota: %d WP / %.2f NM\nTrack: %d pontos\n%s",
+            "Fonte: %s\nPosição: %s\nSOG: %.1f kn\nCOG: %.0f°\nSatélites: %d\nAIS targets: %d (%d risco)\nRota: %d WP / %.2f NM%s\nTrack: %d pontos\n%s",
             source,
             position,
             sog,
             cog,
             satellitesInView,
             aisMarkers.size(),
+            dangerousAisTargets,
             routePoints.size(),
             routeDistanceNm(),
+            routeActive && routeGuidance != null ? String.format(Locale.US, " • ATIVA WP %d • DTW %.2f NM • BTW %.0f° • XTE %.2f NM", routeGuidance.legIndex + 1, routeGuidance.distanceNm, routeGuidance.bearingDeg, routeGuidance.xteNm) : "",
             trackPoints.size(),
             activeChartLabel
         );
@@ -458,6 +464,19 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             target.sogKnots == null ? 0f : target.sogKnots,
             target.cogDeg == null ? 0f : target.cogDeg
         );
+        LatLng own = ownShipPosition();
+        double ownSog = hasFreshGpsFix() && lastLocation != null && lastLocation.hasSpeed() ? lastLocation.getSpeed() * 1.943844 : (lastNmeaSog == null ? 0.0 : lastNmeaSog);
+        double ownCog = hasFreshGpsFix() && lastLocation != null && lastLocation.hasBearing() ? lastLocation.getBearing() : (lastNmeaCog == null ? 0.0 : lastNmeaCog);
+        if (own != null && target.sogKnots != null && target.cogDeg != null) {
+            AisCollisionMonitor.Risk risk = AisCollisionMonitor.calculate(own, ownSog, ownCog, position, target.sogKnots, target.cogDeg, 0.5, 30.0);
+            if (risk != null) {
+                title += String.format(Locale.US, " • CPA %.2f NM • TCPA %.0f min%s", risk.cpaNm, risk.tcpaMinutes, risk.dangerous ? " • RISCO" : "");
+                if (risk.dangerous) {
+                    dangerousAisTargets++;
+                    cursorStatus.setText(String.format(Locale.US, "ALERTA AIS %09d • CPA %.2f NM • TCPA %.0f min", target.mmsi, risk.cpaNm, risk.tcpaMinutes));
+                }
+            }
+        }
         if (marker == null) {
             marker = map.addMarker(new MarkerOptions().position(position).title(title));
             aisMarkers.put(target.mmsi, marker);
@@ -492,7 +511,8 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
             status.setText(String.format(
                 Locale.US,
-                "NMEA UDP • %.6f %.6f • SOG %.1f kn • COG %.0f°",
+                "%s • %.6f %.6f • SOG %.1f kn • COG %.0f°",
+                lastNmeaSource,
                 lastNmeaPosition.getLatitude(),
                 lastNmeaPosition.getLongitude(),
                 lastNmeaSog == null ? 0f : lastNmeaSog,
@@ -501,6 +521,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
             if (tracking) addTrackPoint(lastNmeaPosition);
             updateMobStatus(lastNmeaPosition);
+            updateRouteGuidance(lastNmeaPosition, lastNmeaSog == null ? 0.0 : lastNmeaSog);
         }
     }
 
@@ -585,6 +606,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         ));
 
         updateMobStatus(position);
+        updateRouteGuidance(position, location.hasSpeed() ? location.getSpeed() * 1.943844 : 0.0);
     }
 
     private void updateGpsFreshnessUi() {
@@ -688,6 +710,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     private void showRouteManager() {
         String[] actions = {
+            routeActive ? "Desativar navegação" : "Ativar navegação",
             "Importar GPX",
             "Exportar rota GPX",
             "Inverter rota",
@@ -698,6 +721,21 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             .setItems(actions, (dialog, which) -> {
                 switch (which) {
                     case 0:
+                        if (routeActive) {
+                            routeActive = false;
+                            routeGuidance = null;
+                            cursorStatus.setText("Navegação de rota desativada");
+                        } else if (routePoints.size() < 2) {
+                            Toast.makeText(this, "A rota precisa de pelo menos 2 waypoints.", Toast.LENGTH_LONG).show();
+                        } else {
+                            routeNavigator.reset();
+                            routeActive = true;
+                            LatLng own = ownShipPosition();
+                            if (own != null) updateRouteGuidance(own, currentSogKnots());
+                            Toast.makeText(this, "Navegação da rota ativada.", Toast.LENGTH_LONG).show();
+                        }
+                        break;
+                    case 1:
                         gpxImportPicker.launch(new String[]{
                             "application/gpx+xml",
                             "application/xml",
@@ -706,20 +744,22 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                             "*/*"
                         });
                         break;
-                    case 1:
+                    case 2:
                         if (routePoints.isEmpty()) {
                             Toast.makeText(this, "Não há rota para exportar.", Toast.LENGTH_SHORT).show();
                         } else {
                             gpxExportPicker.launch("SeaTracker-route.gpx");
                         }
                         break;
-                    case 2:
+                    case 3:
                         java.util.Collections.reverse(routePoints);
                         persistPoints("active_route", routePoints);
                         redrawRoute();
                         cursorStatus.setText(routeSummary());
                         break;
-                    case 3:
+                    case 4:
+                        routeActive = false;
+                        routeGuidance = null;
                         clearRoute();
                         Toast.makeText(this, "Rota apagada.", Toast.LENGTH_SHORT).show();
                         break;
@@ -791,6 +831,25 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                 "Falha ao exportar GPX: " + error.getMessage(),
                 Toast.LENGTH_LONG
             ).show();
+        }
+    }
+
+    private double currentSogKnots() {
+        if (hasFreshGpsFix() && lastLocation != null && lastLocation.hasSpeed()) {
+            return lastLocation.getSpeed() * 1.943844;
+        }
+        return lastNmeaSog == null ? 0.0 : lastNmeaSog;
+    }
+
+    private void updateRouteGuidance(LatLng own, double sogKnots) {
+        if (!routeActive || routePoints.size() < 2 || own == null) return;
+        routeGuidance = routeNavigator.update(routePoints, own, sogKnots, System.currentTimeMillis());
+        if (routeGuidance == null) return;
+        String eta = routeGuidance.etaMillis > 0 ? new java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(new java.util.Date(routeGuidance.etaMillis)) : "--:--";
+        cursorStatus.setText(String.format(Locale.US, "ROTA WP %d • DTW %.2f NM • BTW %.0f° • XTE %.2f NM • ETA %s", routeGuidance.legIndex + 1, routeGuidance.distanceNm, routeGuidance.bearingDeg, routeGuidance.xteNm, eta));
+        if (routeGuidance.arrival && routeGuidance.legIndex >= routePoints.size() - 1) {
+            routeActive = false;
+            Toast.makeText(this, "Destino final alcançado.", Toast.LENGTH_LONG).show();
         }
     }
 
