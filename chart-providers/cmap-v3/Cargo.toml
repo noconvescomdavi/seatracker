@@ -1,7 +1,0 @@
-[package]
-name = "seatracker-cmap-v3"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-seatracker-charts = { path = "../../core/charts" }
