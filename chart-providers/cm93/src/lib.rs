@@ -1,3 +1,6 @@
+mod cell;
+pub use cell::*;
+
 use seatracker_charts::{ChartProvider, ProviderCapabilities};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -247,7 +250,7 @@ impl ChartProvider for Cm93Provider {
     }
 
     fn provider_version(&self) -> &'static str {
-        "0.2.0"
+        "0.3.0"
     }
 
     fn can_open(&self, _header: &[u8], extension: Option<&str>) -> bool {
