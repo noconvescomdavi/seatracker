@@ -37,6 +37,8 @@ public final class KapChartDecoder {
         public final Integer scale;
         public final String datum;
         public final String projection;
+        public final double centerLat;
+        public final double centerLon;
 
         Result(
             String name,
@@ -47,7 +49,9 @@ public final class KapChartDecoder {
             int bitsPerPixel,
             Integer scale,
             String datum,
-            String projection
+            String projection,
+            double centerLat,
+            double centerLon
         ) {
             this.name = name;
             this.bitmap = bitmap;
@@ -58,6 +62,8 @@ public final class KapChartDecoder {
             this.scale = scale;
             this.datum = datum;
             this.projection = projection;
+            this.centerLat = centerLat;
+            this.centerLon = centerLon;
         }
 
         public String summary() {
@@ -141,6 +147,7 @@ public final class KapChartDecoder {
             }
 
             LatLngQuad quad = buildQuad(header);
+            double[] center = center(header.refs);
             return new Result(
                 header.name,
                 bitmap,
@@ -150,7 +157,9 @@ public final class KapChartDecoder {
                 header.bits,
                 header.scale,
                 header.datum,
-                header.projection
+                header.projection,
+                center[0],
+                center[1]
             );
         }
     }
@@ -350,6 +359,20 @@ public final class KapChartDecoder {
             new LatLng(se.lat, se.lon),
             new LatLng(sw.lat, sw.lon)
         );
+    }
+
+    private static double[] center(List<Reference> refs) {
+        double minLat = Double.POSITIVE_INFINITY;
+        double maxLat = Double.NEGATIVE_INFINITY;
+        double minLon = Double.POSITIVE_INFINITY;
+        double maxLon = Double.NEGATIVE_INFINITY;
+        for (Reference ref : refs) {
+            minLat = Math.min(minLat, ref.lat);
+            maxLat = Math.max(maxLat, ref.lat);
+            minLon = Math.min(minLon, ref.lon);
+            maxLon = Math.max(maxLon, ref.lon);
+        }
+        return new double[]{(minLat + maxLat) / 2.0, (minLon + maxLon) / 2.0};
     }
 
     private static Reference nearest(List<Reference> refs, double x, double y) {
