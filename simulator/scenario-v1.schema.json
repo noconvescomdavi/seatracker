@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://estibordo.app/schemas/practical-scenario-v1.json",
+  "title": "Estibordo Practical Scenario",
+  "type": "object",
+  "required": ["id","title","initial","vessel","environment","limits"],
+  "properties": {
+    "id":{"type":"string","minLength":1},
+    "title":{"type":"string","minLength":1},
+    "chart":{"type":"object","properties":{"format":{"enum":["KAP","BSB","CM93_V2"]},"name":{"type":"string"}},"additionalProperties":false},
+    "initial":{"type":"object","required":["lat","lon","headingDeg","speedKn"],"properties":{
+      "lat":{"type":"number","minimum":-90,"maximum":90},"lon":{"type":"number","minimum":-180,"maximum":180},
+      "headingDeg":{"type":"number","minimum":0,"exclusiveMaximum":360},"speedKn":{"type":"number","minimum":0}
+    },"additionalProperties":false},
+    "vessel":{"type":"object","required":["maxSpeedKn","maxAsternKn","maxRudderDeg"],"properties":{
+      "maxSpeedKn":{"type":"number","exclusiveMinimum":0},"maxAsternKn":{"type":"number","minimum":0},"maxRudderDeg":{"type":"number","exclusiveMinimum":0,"maximum":45},
+      "accelKnS":{"type":"number","minimum":0},"decelKnS":{"type":"number","minimum":0},"turnRateDegSAtFullRudder10Kn":{"type":"number","minimum":0}
+    },"additionalProperties":false},
+    "environment":{"type":"object","required":["currentSetDeg","currentDriftKn","windFromDeg","windKn"],"properties":{
+      "currentSetDeg":{"type":"number","minimum":0,"exclusiveMaximum":360},"currentDriftKn":{"type":"number","minimum":0},
+      "windFromDeg":{"type":"number","minimum":0,"exclusiveMaximum":360},"windKn":{"type":"number","minimum":0}
+    },"additionalProperties":false},
+    "limits":{"type":"object","required":["maxXteNm","minClearanceNm","maxSpeedKn"],"properties":{
+      "maxXteNm":{"type":"number","minimum":0},"minClearanceNm":{"type":"number","minimum":0},"maxSpeedKn":{"type":"number","minimum":0}
+    },"additionalProperties":false}
+  },
+  "additionalProperties": false
+}
